@@ -1,0 +1,647 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dark Angels Cutscene Preview</title>
+  <style>
+    :root {
+      --bg: #06090d;
+      --panel: #0e151d;
+      --panel-2: #131c25;
+      --gold: #d8a93a;
+      --green: #63e084;
+      --red: #e55a5a;
+      --text: #f4f0e7;
+      --muted: #b9c3cc;
+      --line: #263440;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 22% 18%, rgba(45, 92, 68, .22), transparent 32%),
+        radial-gradient(circle at 80% 12%, rgba(216, 169, 58, .13), transparent 28%),
+        linear-gradient(135deg, #05080b, #0a1017 48%, #11120d);
+      color: var(--text);
+      font-family: Inter, Roboto, Segoe UI, Arial, sans-serif;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 20px 28px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(6, 9, 13, .86);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      backdrop-filter: blur(10px);
+    }
+
+    h1, h2, h3, p { margin: 0; }
+
+    h1 {
+      font-size: 22px;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+
+    .sub {
+      color: var(--muted);
+      margin-top: 4px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      border: 1px solid var(--line);
+      background: #121b24;
+      color: var(--muted);
+      border-radius: 6px;
+      padding: 10px 12px;
+      cursor: pointer;
+      font-weight: 900;
+    }
+
+    button.active {
+      border-color: var(--gold);
+      color: #111;
+      background: var(--gold);
+    }
+
+    main {
+      padding: 24px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 380px;
+      gap: 20px;
+      max-width: 1500px;
+      margin: 0 auto;
+    }
+
+    .stage-card, .side-card {
+      background: rgba(14, 21, 29, .92);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, .35);
+    }
+
+    .stage {
+      height: min(68vh, 760px);
+      min-height: 560px;
+      position: relative;
+      overflow: hidden;
+      background: #020407;
+    }
+
+    .scene {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .35s ease;
+    }
+
+    .scene.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .scene-bg {
+      position: absolute;
+      inset: 0;
+      background-position: center;
+      background-size: cover;
+      filter: saturate(.92) brightness(.74);
+      transform: scale(1.02);
+    }
+
+    .scanlines::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, .035),
+        rgba(255, 255, 255, .035) 1px,
+        transparent 1px,
+        transparent 5px
+      );
+      mix-blend-mode: overlay;
+      pointer-events: none;
+    }
+
+    .vignette::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at center, transparent 42%, rgba(0, 0, 0, .72) 100%),
+        linear-gradient(to top, rgba(0, 0, 0, .65), transparent 44%);
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .briefing-grid {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+      display: grid;
+      grid-template-columns: 38% 1fr;
+      gap: 28px;
+      padding: 52px;
+      align-items: center;
+    }
+
+    .commander {
+      height: 78%;
+      border-radius: 10px;
+      border: 2px solid rgba(216, 169, 58, .7);
+      background:
+        linear-gradient(to top, rgba(0, 0, 0, .78), transparent 45%),
+        url("assets/assets/portraits/cpt_varro.png") center/cover;
+      box-shadow: 0 0 36px rgba(216, 169, 58, .22);
+    }
+
+    .briefing-panel, .caption-panel {
+      background: rgba(8, 12, 16, .86);
+      border: 1px solid rgba(216, 169, 58, .62);
+      border-radius: 8px;
+      padding: 22px;
+      box-shadow: 0 0 30px rgba(0, 0, 0, .5);
+    }
+
+    .eyebrow {
+      color: var(--gold);
+      font-size: 12px;
+      font-weight: 1000;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .briefing-panel h2 {
+      font-size: 34px;
+      line-height: 1;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .briefing-panel p {
+      color: var(--muted);
+      font-weight: 750;
+      line-height: 1.45;
+      margin-bottom: 14px;
+    }
+
+    .objective-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .objective {
+      border: 1px solid var(--line);
+      background: rgba(19, 28, 37, .82);
+      border-radius: 6px;
+      padding: 10px 12px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .objective strong { color: var(--gold); }
+
+    .orbit {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 25% 78%, #20364d 0 17%, #0b1421 18% 28%, transparent 29%),
+        radial-gradient(circle at 52% 30%, rgba(255, 255, 255, .9) 0 1px, transparent 2px),
+        radial-gradient(circle at 72% 24%, rgba(255, 255, 255, .7) 0 1px, transparent 2px),
+        radial-gradient(circle at 88% 66%, rgba(255, 255, 255, .7) 0 1px, transparent 2px),
+        linear-gradient(135deg, #02050b, #09111d 55%, #100d08);
+      overflow: hidden;
+    }
+
+    .ship {
+      position: absolute;
+      width: 260px;
+      height: 44px;
+      top: 18%;
+      left: 10%;
+      background: linear-gradient(90deg, #55606a, #1d252c);
+      clip-path: polygon(0 45%, 68% 0, 100% 50%, 68% 100%, 0 55%);
+      filter: drop-shadow(0 0 18px rgba(99, 224, 132, .22));
+      opacity: .82;
+    }
+
+    .drop-pod {
+      position: absolute;
+      top: -18%;
+      left: 58%;
+      width: 90px;
+      height: 155px;
+      background: linear-gradient(135deg, #6c7377, #20282f 55%, #090d11);
+      clip-path: polygon(50% 0, 88% 20%, 100% 78%, 50% 100%, 0 78%, 12% 20%);
+      border: 2px solid rgba(216, 169, 58, .4);
+      animation: drop 6.8s ease-in infinite;
+      z-index: 3;
+    }
+
+    .drop-pod::before {
+      content: "";
+      position: absolute;
+      left: 42%;
+      top: -220px;
+      width: 18px;
+      height: 240px;
+      background: linear-gradient(to top, transparent, rgba(255, 111, 31, .95), transparent);
+      filter: blur(8px);
+      transform: rotate(-11deg);
+    }
+
+    @keyframes drop {
+      0% { transform: translate(0, -100px) rotate(-16deg) scale(.72); opacity: 0; }
+      14% { opacity: 1; }
+      70% { transform: translate(-230px, 430px) rotate(-16deg) scale(1.18); opacity: 1; }
+      78% { transform: translate(-230px, 430px) rotate(-16deg) scale(1.18); filter: brightness(4); }
+      100% { transform: translate(-230px, 430px) rotate(-16deg) scale(1.18); opacity: .12; }
+    }
+
+    .impact {
+      position: absolute;
+      left: 34%;
+      bottom: 17%;
+      width: 220px;
+      height: 80px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255, 214, 116, .9), rgba(255, 84, 31, .35) 45%, transparent 70%);
+      filter: blur(6px);
+      animation: impact 6.8s ease-in infinite;
+      z-index: 2;
+    }
+
+    @keyframes impact {
+      0%, 68% { transform: scale(.2); opacity: 0; }
+      76% { transform: scale(1.25); opacity: 1; }
+      100% { transform: scale(1.8); opacity: 0; }
+    }
+
+    .battlefield {
+      position: absolute;
+      inset: 0;
+      background: url("assets/assets/images/map_drop_zone_epsilon_generated.png") center/cover;
+      filter: brightness(.7) saturate(.9);
+    }
+
+    .teleport-flash {
+      position: absolute;
+      left: 58%;
+      top: 34%;
+      width: 230px;
+      height: 230px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle, rgba(255, 255, 255, 1), rgba(99, 224, 132, .75) 20%, rgba(56, 134, 255, .35) 46%, transparent 70%);
+      filter: blur(4px);
+      animation: teleport 5.8s ease-in-out infinite;
+      z-index: 3;
+    }
+
+    @keyframes teleport {
+      0%, 35% { opacity: 0; transform: scale(.2); }
+      48% { opacity: 1; transform: scale(1.3); }
+      58% { opacity: .42; transform: scale(.78); }
+      100% { opacity: 0; transform: scale(1.4); }
+    }
+
+    .terminator {
+      position: absolute;
+      left: 63%;
+      top: 47%;
+      width: 95px;
+      height: 120px;
+      border-radius: 14px 14px 8px 8px;
+      background:
+        linear-gradient(90deg, transparent 0 20%, rgba(216, 169, 58, .35) 21% 25%, transparent 26% 74%, rgba(216, 169, 58, .35) 75% 79%, transparent 80%),
+        linear-gradient(135deg, #d9c69d, #6e6047 62%, #262219);
+      box-shadow: 0 0 28px rgba(216, 169, 58, .45);
+      opacity: 0;
+      animation: terminator 5.8s ease-in-out infinite;
+      z-index: 4;
+    }
+
+    .terminator::before {
+      content: "";
+      position: absolute;
+      left: -42px;
+      top: 36px;
+      width: 50px;
+      height: 72px;
+      border-radius: 8px;
+      border: 5px solid #d9c69d;
+      background: rgba(20, 24, 27, .75);
+    }
+
+    @keyframes terminator {
+      0%, 45% { opacity: 0; transform: translateY(12px) scale(.8); }
+      58%, 100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .extraction-pod {
+      position: absolute;
+      right: 9%;
+      top: -18%;
+      width: 86px;
+      height: 150px;
+      background: linear-gradient(135deg, #777f82, #252e34 55%, #090d11);
+      clip-path: polygon(50% 0, 88% 20%, 100% 78%, 50% 100%, 0 78%, 12% 20%);
+      animation: extractpod 6.5s ease-in-out infinite;
+      z-index: 4;
+    }
+
+    @keyframes extractpod {
+      0% { opacity: 0; transform: translate(0, -160px) rotate(9deg); }
+      28% { opacity: 1; }
+      62%, 100% { opacity: 1; transform: translate(-60px, 445px) rotate(9deg); }
+    }
+
+    .smoke {
+      position: absolute;
+      right: 10%;
+      bottom: 18%;
+      width: 280px;
+      height: 120px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(190, 197, 196, .6), transparent 70%);
+      filter: blur(14px);
+      animation: smoke 6.5s ease-in-out infinite;
+      z-index: 2;
+    }
+
+    @keyframes smoke {
+      0%, 50% { opacity: 0; transform: scale(.5); }
+      70%, 100% { opacity: .9; transform: scale(1.2); }
+    }
+
+    .caption-panel {
+      position: absolute;
+      left: 38px;
+      right: 38px;
+      bottom: 34px;
+      z-index: 5;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .caption-title {
+      color: var(--gold);
+      font-weight: 1000;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+
+    .caption-body {
+      color: var(--text);
+      font-size: 20px;
+      font-weight: 900;
+    }
+
+    .caption-note {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+      text-align: right;
+      max-width: 320px;
+    }
+
+    .side-card {
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .side-card h2 {
+      color: var(--gold);
+      text-transform: uppercase;
+      font-size: 16px;
+      letter-spacing: .08em;
+    }
+
+    .beat-list {
+      display: grid;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 750;
+      line-height: 1.38;
+    }
+
+    .beat {
+      padding: 10px;
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      border-radius: 6px;
+    }
+
+    .prompt {
+      white-space: pre-wrap;
+      background: #070b10;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      color: #dce6ef;
+      font-size: 12px;
+      line-height: 1.4;
+      max-height: 310px;
+      overflow: auto;
+    }
+
+    .status {
+      display: inline-flex;
+      width: fit-content;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border: 1px solid rgba(99, 224, 132, .45);
+      color: var(--green);
+      background: rgba(99, 224, 132, .1);
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    @media (max-width: 1080px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+
+      .stage {
+        min-height: 520px;
+        height: 62vh;
+      }
+
+      .briefing-grid {
+        grid-template-columns: 1fr;
+        padding: 28px;
+      }
+
+      .commander {
+        min-height: 240px;
+        height: 240px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Cutscene Preview - Operation Iron Halo</h1>
+      <div class="sub">Animatic check for the 3 cutscenes from the mission flow MD.</div>
+    </div>
+    <nav class="tabs" aria-label="Cutscene tabs">
+      <button class="active" data-scene="briefing">01 Briefing</button>
+      <button data-scene="drop">02 Orbital Drop</button>
+      <button data-scene="outro">03 Terminator Outro</button>
+    </nav>
+  </header>
+
+  <main>
+    <section class="stage-card">
+      <div class="stage scanlines vignette">
+        <article class="scene active" id="scene-briefing">
+          <div class="scene-bg" style="background-image:url('assets/assets/images/hub_spaceship.png')"></div>
+          <div class="briefing-grid">
+            <div class="commander" role="img" aria-label="Commander portrait"></div>
+            <div class="briefing-panel">
+              <div class="eyebrow">The Obolus Prime Incursion</div>
+              <h2>Operation Iron Halo</h2>
+              <p>
+                "Drop Zone Epsilon is lost. You will land with four battle-brothers,
+                secure the relay, and recover any encrypted trace tied to the Fallen signal."
+              </p>
+              <div class="objective-list">
+                <div class="objective"><strong>Main:</strong> Secure the landing zone and activate the orbital relay.</div>
+                <div class="objective"><strong>Hidden:</strong> Recover encrypted Fallen traffic from relay logs.</div>
+                <div class="objective"><strong>Tactical:</strong> Initial squad limited to 4 marines. Reinforcements unlock after relay capture.</div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="scene" id="scene-drop">
+          <div class="orbit">
+            <div class="ship"></div>
+            <div class="drop-pod"></div>
+            <div class="impact"></div>
+          </div>
+          <div class="caption-panel">
+            <div>
+              <div class="caption-title">Orbital Drop Cutscene</div>
+              <div class="caption-body">Drop pod burns through atmosphere, impacts Drop Zone Epsilon, then fades into player control.</div>
+            </div>
+            <div class="caption-note">Matches MD: orbit shot -> drop pod launch -> impact flash -> battlefield camera shake.</div>
+          </div>
+        </article>
+
+        <article class="scene" id="scene-outro">
+          <div class="battlefield"></div>
+          <div class="teleport-flash"></div>
+          <div class="terminator"></div>
+          <div class="extraction-pod"></div>
+          <div class="smoke"></div>
+          <div class="caption-panel">
+            <div>
+              <div class="caption-title">End Cutscene</div>
+              <div class="caption-body">Objective complete. Deathwing support teleports behind cover as extraction pod descends through smoke.</div>
+            </div>
+            <div class="caption-note">Combines approved outro options: Terminator teleport support + drop pod extraction.</div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <aside class="side-card">
+      <span class="status">Preview only - storyboard accurate, not final video</span>
+      <h2 id="side-title">01 Commander Briefing</h2>
+      <div class="beat-list" id="beats"></div>
+      <h2>Veo 3 Prompt Draft</h2>
+      <div class="prompt" id="prompt"></div>
+    </aside>
+  </main>
+
+  <script>
+    const sceneData = {
+      briefing: {
+        title: "01 Commander Briefing",
+        beats: [
+          "Campaign title: The Obolus Prime Incursion.",
+          "Operation name: Operation Iron Halo.",
+          "Commander portrait appears before mission start.",
+          "Public objective and hidden Inner Circle directive are stated clearly.",
+          "Player understands: 4 initial marines, relay capture unlocks reinforcement."
+        ],
+        prompt: `Cinematic game mission briefing screen, gothic sci-fi command deck aboard a warship, stern armored commander portrait on the left, holographic tactical table glow, dark green and gold military UI, operation title "Operation Iron Halo", public objective to secure Drop Zone Epsilon and hidden directive to recover encrypted Fallen traffic. Serious tone, grimdark but original fan-inspired design, no official logos, readable UI composition, 16:9 cinematic framing.`
+      },
+      drop: {
+        title: "02 Orbital Drop",
+        beats: [
+          "Black/vox opening implied by the caption flow.",
+          "Orbit shot with fleet silhouette.",
+          "Drop pod launches and burns through atmosphere.",
+          "Impact flash and smoke mark landing.",
+          "Next gameplay state: 4 marines deploy around the pod."
+        ],
+        prompt: `Cinematic orbital drop sequence for a tactical sci-fi game, warship in orbit above a burning forge-hive world, armored drop pod launches from orbit, fiery atmospheric entry trail, violent impact on an industrial landing zone, dust and smoke burst, camera shake feeling, transition into a tactical battlefield. Original dark gothic sci-fi style, no logos, no text, dramatic lighting, 16:9.`
+      },
+      outro: {
+        title: "03 Terminator Outro",
+        beats: [
+          "Main objective is complete.",
+          "Enemy counterattack pressure begins.",
+          "Teleport homer activates behind cover.",
+          "Deathwing-style heavy support teleports in with lightning flash.",
+          "Extraction pod descends through smoke and the mission fades to results."
+        ],
+        prompt: `Cinematic mission outro for a tactical sci-fi game, industrial battlefield at night, objective complete, green teleport homer activates behind heavy cover, massive elite terminator-style armored warrior materializes in lightning and smoke, storm shield raised, extraction drop pod descends nearby through smoke, surviving soldiers withdraw. Grim dark military tone, original armor design, no official insignia, 16:9, high contrast, cinematic action.`
+      }
+    };
+
+    const buttons = document.querySelectorAll("button[data-scene]");
+    const scenes = document.querySelectorAll(".scene");
+    const title = document.getElementById("side-title");
+    const beats = document.getElementById("beats");
+    const prompt = document.getElementById("prompt");
+
+    function showScene(name) {
+      buttons.forEach(button => button.classList.toggle("active", button.dataset.scene === name));
+      scenes.forEach(scene => scene.classList.toggle("active", scene.id === `scene-${name}`));
+      const data = sceneData[name];
+      title.textContent = data.title;
+      beats.innerHTML = data.beats.map(beat => `<div class="beat">${beat}</div>`).join("");
+      prompt.textContent = data.prompt;
+    }
+
+    buttons.forEach(button => button.addEventListener("click", () => showScene(button.dataset.scene)));
+    showScene("briefing");
+  </script>
+</body>
+</html>
