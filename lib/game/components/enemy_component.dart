@@ -32,6 +32,7 @@ class EnemyComponent extends SpriteAnimationGroupComponent<UnitState>
   EnemyUnit enemyState;
   RectangleComponent? _hpBar;
   double _idleTime = 0;
+  bool _animationsReady = false;
 
   Future<SpriteAnimation> _loadAnim(String path) async {
     final img = await game.images.load(path);
@@ -64,6 +65,7 @@ class EnemyComponent extends SpriteAnimationGroupComponent<UnitState>
       UnitState.attack: await _loadAnim('sprites/enemies/${prefix}_attack.png'),
       UnitState.dead: await _loadAnim('sprites/enemies/${prefix}_dead.png'),
     };
+    _animationsReady = true;
     current = UnitState.idle;
 
     _hpBar = RectangleComponent(
@@ -82,6 +84,11 @@ class EnemyComponent extends SpriteAnimationGroupComponent<UnitState>
   void sync(EnemyUnit enemy) {
     enemyState = enemy;
     final target = game.gridToWorld(enemy.position);
+
+    if (!_animationsReady) {
+      position = target;
+      return;
+    }
 
     if (enemy.hp <= 0) {
       current = UnitState.dead;
@@ -104,6 +111,7 @@ class EnemyComponent extends SpriteAnimationGroupComponent<UnitState>
   }
 
   void pulseHit() {
+    if (!_animationsReady) return;
     if (current == UnitState.dead) return;
     current = UnitState.attack;
     add(
@@ -120,6 +128,7 @@ class EnemyComponent extends SpriteAnimationGroupComponent<UnitState>
   @override
   void update(double dt) {
     super.update(dt);
+    if (!_animationsReady) return;
     if (current != UnitState.idle) return;
     _idleTime += dt;
     final pulse = 1.0 + sin(_idleTime * 4.8 + enemyId.hashCode) * 0.025;

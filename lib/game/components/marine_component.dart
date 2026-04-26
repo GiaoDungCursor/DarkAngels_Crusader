@@ -28,6 +28,8 @@ class MarineComponent extends SpriteAnimationGroupComponent<UnitState>
   CircleComponent? _selectionRing;
   RectangleComponent? _actedBadge;
   double _idleTime = 0;
+  bool _animationsReady = false;
+  bool _selected = false;
 
   Future<SpriteAnimation> _loadAnim(String path) async {
     final img = await game.images.load(path);
@@ -59,7 +61,9 @@ class MarineComponent extends SpriteAnimationGroupComponent<UnitState>
       UnitState.dead: await _loadAnim('sprites/marines/${key}_dead.png'),
     };
 
+    _animationsReady = true;
     current = UnitState.idle;
+    sync(marineState, selected: _selected);
   }
 
   @override
@@ -69,7 +73,16 @@ class MarineComponent extends SpriteAnimationGroupComponent<UnitState>
 
   void sync(Marine marine, {required bool selected}) {
     marineState = marine;
+    _selected = selected;
     final target = game.gridToWorld(marine.gridPosition);
+
+    if (!_animationsReady) {
+      position = target;
+      opacity = marine.hp <= 0 ? 0.35 : opacity;
+      _syncSelection(selected);
+      _syncActedBadge(marine.actionPoints == 0);
+      return;
+    }
 
     if (marine.hp <= 0) {
       current = UnitState.dead;
@@ -97,6 +110,7 @@ class MarineComponent extends SpriteAnimationGroupComponent<UnitState>
   }
 
   void pulseAttack() {
+    if (!_animationsReady) return;
     if (current == UnitState.dead) return;
 
     current = UnitState.attack;
@@ -114,6 +128,7 @@ class MarineComponent extends SpriteAnimationGroupComponent<UnitState>
   @override
   void update(double dt) {
     super.update(dt);
+    if (!_animationsReady) return;
     if (current != UnitState.idle) return;
     _idleTime += dt;
     final pulse = 1.0 + sin(_idleTime * 5.5 + index) * 0.03;

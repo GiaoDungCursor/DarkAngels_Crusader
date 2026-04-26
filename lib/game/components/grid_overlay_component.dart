@@ -22,7 +22,11 @@ class GridOverlayComponent extends PositionComponent
   final Paint _meleePaint = Paint()..color = const Color(0x55FF6B5F);
   final Paint _deployPaint = Paint()..color = const Color(0x6633D6A6);
   final Paint _plantBombPaint = Paint()..color = const Color(0x66C04040);
-  final Paint _blockedPaint = Paint()..color = const Color(0x99515C66);
+  final Paint _blockedPaint = Paint()..color = const Color(0x70313A42);
+  final Paint _blockedStrokePaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 1.5
+    ..color = const Color(0xAA7B8794);
   final Paint _voidPaint = Paint()..color = const Color(0xB0000000);
 
   @override
@@ -45,11 +49,16 @@ class GridOverlayComponent extends PositionComponent
           canvas.drawRect(rect, _voidPaint);
           _drawCross(canvas, rect, const Color(0xFF2B3440));
         } else if (snapshot.map.blockedTiles.contains(tile)) {
+          final blockedRect = rect.deflate(4);
           canvas.drawRRect(
-            RRect.fromRectAndRadius(rect.deflate(4), const Radius.circular(4)),
+            RRect.fromRectAndRadius(blockedRect, const Radius.circular(4)),
             _blockedPaint,
           );
-          _drawCross(canvas, rect.deflate(10), const Color(0xFFE2E8F0));
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(blockedRect, const Radius.circular(4)),
+            _blockedStrokePaint,
+          );
+          _drawCornerTicks(canvas, blockedRect, const Color(0xCCB8C0CA));
         }
 
         if (snapshot.coverTiles.contains(tile) ||
@@ -153,5 +162,53 @@ class GridOverlayComponent extends PositionComponent
       ..style = PaintingStyle.stroke;
     canvas.drawLine(rect.topLeft, rect.bottomRight, paint);
     canvas.drawLine(rect.topRight, rect.bottomLeft, paint);
+  }
+
+  void _drawCornerTicks(Canvas canvas, Rect rect, Color color) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.4
+      ..style = PaintingStyle.stroke;
+    const length = 8.0;
+    canvas.drawLine(
+      rect.topLeft,
+      rect.topLeft + const Offset(length, 0),
+      paint,
+    );
+    canvas.drawLine(
+      rect.topLeft,
+      rect.topLeft + const Offset(0, length),
+      paint,
+    );
+    canvas.drawLine(
+      rect.topRight,
+      rect.topRight + const Offset(-length, 0),
+      paint,
+    );
+    canvas.drawLine(
+      rect.topRight,
+      rect.topRight + const Offset(0, length),
+      paint,
+    );
+    canvas.drawLine(
+      rect.bottomLeft,
+      rect.bottomLeft + const Offset(length, 0),
+      paint,
+    );
+    canvas.drawLine(
+      rect.bottomLeft,
+      rect.bottomLeft + const Offset(0, -length),
+      paint,
+    );
+    canvas.drawLine(
+      rect.bottomRight,
+      rect.bottomRight + const Offset(-length, 0),
+      paint,
+    );
+    canvas.drawLine(
+      rect.bottomRight,
+      rect.bottomRight + const Offset(0, -length),
+      paint,
+    );
   }
 }
