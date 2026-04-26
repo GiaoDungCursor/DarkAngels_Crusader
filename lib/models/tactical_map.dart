@@ -250,7 +250,7 @@ final campaignMaps = [
     name: 'Drop Zone Epsilon: Broken Landing',
     subtitle: 'Hold the 3-lane landing grid against Ork waves',
     icon: Icons.rocket_launch,
-    background: 'map_drop_zone_epsilon_generated.png',
+    background: 'maps/map_drop_zone_epsilon_generated.png',
     layout: [
       '################',
       '#SS.CC...vv...E#',
@@ -292,7 +292,7 @@ final campaignMaps = [
     name: 'Hive Gate Primus',
     subtitle: 'Purge the relay station and hidden cult beacon',
     icon: Icons.fort,
-    background: 'map_hive_gate_primus_generated.png',
+    background: 'maps/map_hive_gate_primus_generated.png',
     layout: [
       '################',
       '#X...C...vv.EE.#',
@@ -332,7 +332,7 @@ final campaignMaps = [
     name: 'Ash Basilica',
     subtitle: 'Secure the Fallen clue and extract',
     icon: Icons.account_balance,
-    background: 'map_ash_basilica_generated.png',
+    background: 'maps/map_ash_basilica_generated.png',
     layout: [
       '################',
       '#..vv....C..EE.#',

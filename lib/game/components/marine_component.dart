@@ -33,10 +33,10 @@ class MarineComponent extends SpriteGroupComponent<UnitState>
   Future<void> onLoad() async {
     await super.onLoad();
 
-    final idleSprite = await game.loadSprite('marine_idle.png');
-    final walkSprite = await game.loadSprite('marine_walk.png');
-    final attackSprite = await game.loadSprite('marine_attack.png');
-    final deadSprite = await game.loadSprite('marine_dead.png');
+    final idleSprite = await game.loadSprite('sprites/marines/marine_idle.png');
+    final walkSprite = await game.loadSprite('sprites/marines/marine_walk.png');
+    final attackSprite = await game.loadSprite('sprites/marines/marine_attack.png');
+    final deadSprite = await game.loadSprite('sprites/marines/marine_dead.png');
 
     sprites = {
       UnitState.idle: idleSprite,
@@ -61,7 +61,7 @@ class MarineComponent extends SpriteGroupComponent<UnitState>
       current = UnitState.dead;
       opacity = 0.8;
       _syncSelection(selected);
-      _syncActedBadge(marine.hasMoved && marine.hasAttacked);
+      _syncActedBadge(marine.actionPoints == 0);
       return;
     }
 
@@ -78,7 +78,7 @@ class MarineComponent extends SpriteGroupComponent<UnitState>
 
     opacity = marine.hp <= 0 ? 0.35 : 1;
     _syncSelection(selected);
-    _syncActedBadge(marine.hasMoved && marine.hasAttacked);
+    _syncActedBadge(marine.actionPoints == 0);
   }
 
   void pulseAttack() {

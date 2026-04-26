@@ -25,7 +25,7 @@ enum SimulationSpeed { paused, slow, normal }
 
 enum ThreatLevel { safe, warning, danger }
 
-enum ActivationPhase { marines, enemies }
+enum ActivationPhase { deployment, marines, enemies }
 
 enum MissionStatus { active, victory, defeat }
 
@@ -58,6 +58,7 @@ class GameState {
   final int activationRound;
   final SimulationSpeed speed;
   final MissionStatus missionStatus;
+  final Set<GridPosition> selectedDropZones;
   final double elapsedSeconds;
   final double cpChargeSeconds;
   final double aiThinkSeconds;
@@ -100,6 +101,7 @@ class GameState {
     required this.revision,
     required this.statusMessage,
     required this.events,
+    this.selectedDropZones = const {},
   });
 
   int get columns => map.width;
@@ -135,13 +137,14 @@ class GameState {
 
   Set<GridPosition> get reachableTiles {
     final marine = selectedMarine;
-    if (marine == null || !isMarinePhase || marine.hasMoved || marine.hp <= 0) {
+    if (marine == null || !isMarinePhase || marine.actionPoints == 0 || marine.hp <= 0) {
       return {};
     }
+    final maxSteps = marine.actionPoints >= 2 ? marineMoveRange : 2;
     return const Pathfinder().reachable(
       map: map,
       start: marine.gridPosition,
-      maxSteps: marineMoveRange,
+      maxSteps: maxSteps,
       blockers: blockers..remove(marine.gridPosition),
     );
   }
@@ -150,7 +153,7 @@ class GameState {
     final marine = selectedMarine;
     if (marine == null ||
         !isMarinePhase ||
-        marine.hasAttacked ||
+        marine.actionPoints == 0 ||
         marine.hp <= 0) {
       return {};
     }
@@ -174,7 +177,7 @@ class GameState {
     final marine = selectedMarine;
     if (marine == null ||
         !isMarinePhase ||
-        marine.hasAttacked ||
+        marine.actionPoints == 0 ||
         marine.hp <= 0) {
       return {};
     }
@@ -193,7 +196,7 @@ class GameState {
     final marine = selectedMarine;
     if (marine == null ||
         !isMarinePhase ||
-        marine.hasAttacked ||
+        marine.actionPoints == 0 ||
         marine.hp <= 0) {
       return {};
     }
@@ -247,7 +250,7 @@ class GameState {
 
   Set<GridPosition> get deployBeaconTiles {
     final marine = selectedMarine;
-    if (marine == null || !isMarinePhase || marine.hasAttacked || marine.hp <= 0) {
+    if (marine == null || !isMarinePhase || marine.actionPoints == 0 || marine.hp <= 0) {
       return {};
     }
     final role = marine.role.toLowerCase();
@@ -391,6 +394,7 @@ class GameState {
     int? revision,
     String? statusMessage,
     List<CombatEvent>? events,
+    Set<GridPosition>? selectedDropZones,
   }) {
     return GameState(
       commandPoints: commandPoints ?? this.commandPoints,
@@ -423,6 +427,7 @@ class GameState {
       revision: revision ?? this.revision + 1,
       statusMessage: statusMessage ?? this.statusMessage,
       events: events ?? this.events,
+      selectedDropZones: selectedDropZones ?? this.selectedDropZones,
     );
   }
 }
@@ -457,13 +462,7 @@ class GameStateNotifier extends Notifier<GameState> {
       state = _emit(state, 'Enemy activation in progress.');
       return;
     }
-    if (index != state.selectedMarineIndex) {
-      state = _emit(
-        state,
-        '${state.squad[index].name} is waiting for their activation.',
-      );
-      return;
-    }
+
     state = _emit(
       state.copyWith(
         selectedMarineIndex: index,
@@ -516,6 +515,14 @@ class GameStateNotifier extends Notifier<GameState> {
       state = _emit(state, 'Mission already resolved.');
       return;
     }
+    
+    if (state.activationPhase == ActivationPhase.deployment) {
+      if (state.map.marineSpawns.contains(tile)) {
+        toggleDropZone(tile);
+      }
+      return;
+    }
+
     if (state.activationPhase != ActivationPhase.marines) {
       state = _emit(state, 'Wait for the enemy phase to resolve.');
       return;
@@ -550,7 +557,7 @@ class GameStateNotifier extends Notifier<GameState> {
   bool issueMove(GridPosition target) {
     final marine = state.selectedMarine;
     if (marine == null ||
-        marine.hasMoved ||
+        marine.actionPoints == 0 ||
         state.missionStatus != MissionStatus.active ||
         state.activationPhase != ActivationPhase.marines) {
       state = _emit(state, 'This battle-brother cannot move now.');
@@ -563,24 +570,27 @@ class GameStateNotifier extends Notifier<GameState> {
       goal: target,
       blockers: blockers,
     );
-    if (path.length < 2 || path.length - 1 > GameState.marineMoveRange) {
+    final distance = path.length - 1;
+    final maxAllowed = marine.actionPoints >= 2 ? GameState.marineMoveRange : 2;
+    if (distance <= 0 || distance > maxAllowed) {
       state = _emit(
         state,
-        'Move rejected: target must be within 2 clear tiles.',
+        'Move rejected: target out of reach.',
       );
       return false;
     }
 
+    final apCost = distance > 2 ? 2 : 1;
     final squad = List<Marine>.from(state.squad);
     squad[state.selectedMarineIndex] = marine.copyWith(
       gridPosition: target,
       commandPath: const [],
       commandProgress: 0,
-      hasMoved: true,
+      actionPoints: max(0, marine.actionPoints - apCost),
       isOverwatching: false,
     );
     state = _emit(
-      state.copyWith(squad: squad, actionMode: ActionMode.shoot),
+      state.copyWith(squad: squad, actionMode: ActionMode.move),
       '${marine.name} moving to grid $target.',
     );
     return true;
@@ -589,7 +599,7 @@ class GameStateNotifier extends Notifier<GameState> {
   bool issueAttack(GridPosition target, {required bool melee}) {
     final marine = state.selectedMarine;
     if (marine == null ||
-        marine.hasAttacked ||
+        marine.actionPoints == 0 ||
         state.missionStatus != MissionStatus.active ||
         state.activationPhase != ActivationPhase.marines) {
       state = _emit(state, 'This battle-brother cannot attack now.');
@@ -625,7 +635,7 @@ class GameStateNotifier extends Notifier<GameState> {
       melee ? 24 : marine.weapon.damage,
       '${marine.name} ${melee ? 'charges' : 'fires on'} ${state.enemies[enemyIndex].name}.',
       attackerPosition: marine.gridPosition,
-      markAttackerSpent: true,
+      apCost: 1,
     );
     return true;
   }
@@ -651,6 +661,9 @@ class GameStateNotifier extends Notifier<GameState> {
       squad[woundedIndex] = wounded.copyWith(
         hp: min(wounded.maxHp, wounded.hp + 28),
       );
+      squad[state.selectedMarineIndex] = marine.copyWith(
+        actionPoints: max(0, marine.actionPoints - 1),
+      );
       state = _emit(
         state.copyWith(commandPoints: state.commandPoints - 1, squad: squad),
         '${marine.name} restores ${wounded.name}.',
@@ -672,7 +685,11 @@ class GameStateNotifier extends Notifier<GameState> {
         }
       }
       if (hit) {
-        state = state.copyWith(commandPoints: max(0, state.commandPoints - 1));
+        final squad = List<Marine>.from(state.squad);
+        squad[state.selectedMarineIndex] = marine.copyWith(
+          actionPoints: max(0, marine.actionPoints - 1),
+        );
+        state = state.copyWith(commandPoints: max(0, state.commandPoints - 1), squad: squad);
         return true;
       }
     }
@@ -697,6 +714,7 @@ class GameStateNotifier extends Notifier<GameState> {
       damage,
       '${marine.name} executes a class ability.',
       attackerPosition: marine.gridPosition,
+      apCost: 1,
     );
     state = state.copyWith(commandPoints: state.commandPoints - cost);
     return true;
@@ -704,10 +722,10 @@ class GameStateNotifier extends Notifier<GameState> {
 
   void setOverwatch() {
     final marine = state.selectedMarine;
-    if (marine == null || marine.hasAttacked) return;
+    if (marine == null || marine.actionPoints == 0) return;
     final squad = List<Marine>.from(state.squad);
     squad[state.selectedMarineIndex] = marine.copyWith(
-      hasAttacked: true,
+      actionPoints: max(0, marine.actionPoints - 1),
       isOverwatching: true,
     );
     state = _emit(
@@ -718,7 +736,7 @@ class GameStateNotifier extends Notifier<GameState> {
 
   bool plantBomb(GridPosition target) {
     final marine = state.selectedMarine;
-    if (marine == null || marine.hasAttacked) return false;
+    if (marine == null || marine.actionPoints == 0) return false;
     if (!state.activeEnemyBases.contains(target) ||
         state.plantedBombs.containsKey(target)) {
       state = _emit(state, 'Cannot plant bomb here.');
@@ -736,7 +754,7 @@ class GameStateNotifier extends Notifier<GameState> {
 
     final squad = List<Marine>.from(state.squad);
     squad[state.selectedMarineIndex] = marine.copyWith(
-      hasAttacked: true,
+      actionPoints: max(0, marine.actionPoints - 1),
       isOverwatching: false,
     );
 
@@ -763,35 +781,11 @@ class GameStateNotifier extends Notifier<GameState> {
     );
   }
 
-  void endPlayerTurn() {
+  void endSquadTurn() {
     if (state.missionStatus != MissionStatus.active) return;
     if (state.activationPhase != ActivationPhase.marines) return;
 
     final squad = List<Marine>.from(state.squad);
-    final active = state.selectedMarine;
-    if (active != null) {
-      squad[state.selectedMarineIndex] = active.copyWith(
-        hasMoved: true,
-        hasAttacked: true,
-        isOverwatching: false,
-      );
-    }
-
-    final nextMarine = _nextReadyMarineIndex(
-      squad,
-      state.selectedMarineIndex + 1,
-    );
-    if (nextMarine != -1) {
-      state = _emit(
-        state.copyWith(
-          squad: squad,
-          selectedMarineIndex: nextMarine,
-          actionMode: ActionMode.move,
-        ),
-        '${squad[nextMarine].name} is active.',
-      );
-      return;
-    }
 
     // Process bomb timers before enemy activation
     var nextState = _processBombs(
@@ -819,26 +813,22 @@ class GameStateNotifier extends Notifier<GameState> {
     final resetSquad = [
       for (final marine in afterEnemies.squad)
         marine.copyWith(
-          hasMoved: false,
-          hasAttacked: false,
+          actionPoints: marine.maxActionPoints,
           isOverwatching: false,
         ),
     ];
-    final firstMarine = _nextReadyMarineIndex(resetSquad, 0);
     state = _emit(
       afterEnemies.copyWith(
         squad: resetSquad,
-        selectedMarineIndex: max(0, firstMarine),
         activationPhase: ActivationPhase.marines,
         activeEnemyIndex: 0,
         activationRound: afterEnemies.activationRound + 1,
         actionMode: ActionMode.move,
         clearSelectedReserve: true,
-        commandPoints: min(10, afterEnemies.commandPoints + 1),
+        commandPoints: min(GameState.maxCommandPoints, afterEnemies.commandPoints + 1),
       ),
-      firstMarine == -1
-          ? 'No battle-brothers remain standing.'
-          : 'Enemy phase complete. ${resetSquad[firstMarine].name} is active.',
+      'Squad Phase Begins. Command points regenerated.',
+      important: true,
     );
   }
 
@@ -983,7 +973,9 @@ class GameStateNotifier extends Notifier<GameState> {
     
     final newBeacons = Set<GridPosition>.from(state.activeDropBeacons)..add(tile);
     final squad = List<Marine>.from(state.squad);
-    squad[state.selectedMarineIndex] = marine.copyWith(hasAttacked: true);
+    squad[state.selectedMarineIndex] = marine.copyWith(
+      actionPoints: max(0, marine.actionPoints - 1),
+    );
     
     state = _emit(
       state.copyWith(
@@ -1017,8 +1009,7 @@ class GameStateNotifier extends Notifier<GameState> {
     final reinforcement = reserve.removeAt(reserveIndex);
     final deployed = reinforcement.copyWith(
       gridPosition: tile,
-      hasMoved: true,
-      hasAttacked: true,
+      actionPoints: 0,
       isOverwatching: false,
     );
 
@@ -1105,8 +1096,8 @@ class GameStateNotifier extends Notifier<GameState> {
       enemies: _initEnemies(index),
       selectedMarineIndex: 0,
       selectedReserveIndex: null,
-      actionMode: ActionMode.move,
-      activationPhase: ActivationPhase.marines,
+      actionMode: null,
+      activationPhase: ActivationPhase.deployment,
       activeEnemyIndex: 0,
       activationRound: 1,
       speed: SimulationSpeed.paused,
@@ -1126,6 +1117,7 @@ class GameStateNotifier extends Notifier<GameState> {
       events: [
         CombatEvent(event ?? 'Mission loaded: ${map.name}.', important: true),
       ],
+      selectedDropZones: const {},
     );
   }
 
@@ -1288,14 +1280,7 @@ class GameStateNotifier extends Notifier<GameState> {
     };
   }
 
-  int _nextReadyMarineIndex(List<Marine> squad, int start) {
-    for (var i = start; i < squad.length; i++) {
-      if (squad[i].hp > 0 && !squad[i].hasMoved && !squad[i].hasAttacked) {
-        return i;
-      }
-    }
-    return -1;
-  }
+
 
   GameState _runEnemyActivationRound(GameState current) {
     var next = current;
@@ -1583,7 +1568,7 @@ class GameStateNotifier extends Notifier<GameState> {
     int rawDamage,
     String message, {
     required GridPosition attackerPosition,
-    bool markAttackerSpent = false,
+    int apCost = 0,
   }) {
     final enemy = state.enemies[enemyIndex];
     final inCover = GameState.hasDirectionalCover(
@@ -1596,11 +1581,11 @@ class GameStateNotifier extends Notifier<GameState> {
     final enemies = List<EnemyUnit>.from(state.enemies);
     enemies[enemyIndex] = enemy.copyWith(hp: nextHp);
     var squad = state.squad;
-    if (markAttackerSpent) {
+    if (apCost > 0) {
       squad = List<Marine>.from(state.squad);
       final marine = squad[state.selectedMarineIndex];
       squad[state.selectedMarineIndex] = marine.copyWith(
-        hasAttacked: true,
+        actionPoints: max(0, marine.actionPoints - apCost),
         isOverwatching: false,
       );
     }
@@ -1620,7 +1605,7 @@ class GameStateNotifier extends Notifier<GameState> {
         commandPoints: defeated
             ? min(GameState.maxCommandPoints, state.commandPoints + 1)
             : state.commandPoints,
-        actionMode: markAttackerSpent ? ActionMode.move : state.actionMode,
+        actionMode: apCost > 0 ? ActionMode.move : state.actionMode,
       ),
       defeated
           ? '$message ${enemy.name} eliminated.'
@@ -1692,6 +1677,40 @@ class GameStateNotifier extends Notifier<GameState> {
     return bestIndex;
   }
 
+  void toggleDropZone(GridPosition tile) {
+    if (state.activationPhase != ActivationPhase.deployment) return;
+    
+    final currentSelected = Set<GridPosition>.from(state.selectedDropZones);
+    if (currentSelected.contains(tile)) {
+      currentSelected.remove(tile);
+    } else {
+      if (currentSelected.length < state.squad.length) {
+        currentSelected.add(tile);
+      }
+    }
+    state = state.copyWith(selectedDropZones: currentSelected);
+  }
+
+  void confirmDeployment() {
+    if (state.activationPhase != ActivationPhase.deployment) return;
+    if (state.selectedDropZones.length != state.squad.length) return;
+
+    final drops = state.selectedDropZones.toList();
+    final newSquad = <Marine>[];
+    for (int i = 0; i < state.squad.length; i++) {
+      newSquad.add(state.squad[i].copyWith(gridPosition: drops[i]));
+    }
+
+    state = state.copyWith(
+      activationPhase: ActivationPhase.marines,
+      squad: newSquad,
+      events: [
+        ...state.events,
+        const CombatEvent('Drop coordinates confirmed. Initiating planetfall.', important: true),
+      ],
+      statusMessage: 'Drop pods launched. Squad deployed.',
+    );
+  }
 
   GameState _emit(GameState next, String message, {bool important = false}) {
     final events = [

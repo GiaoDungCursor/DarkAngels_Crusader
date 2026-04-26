@@ -20,7 +20,7 @@ class HubScreen extends StatelessWidget {
           return Stack(
             fit: StackFit.expand,
             children: [
-              Image.asset('assets/images/hub_spaceship.png', fit: BoxFit.cover),
+              Image.asset('assets/images/backgrounds/hub_spaceship.png', fit: BoxFit.cover),
               _ImageAnchoredZone(
                 mapper: mapper,
                 sourceRect: const Rect.fromLTWH(260, 575, 405, 155),

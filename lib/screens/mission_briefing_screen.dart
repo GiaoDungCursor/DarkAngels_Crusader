@@ -41,7 +41,7 @@ class _MissionBriefingScreenState extends State<MissionBriefingScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Image.asset('assets/images/hub_spaceship.png', fit: BoxFit.cover),
+            Image.asset('assets/images/backgrounds/hub_spaceship.png', fit: BoxFit.cover),
             DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(

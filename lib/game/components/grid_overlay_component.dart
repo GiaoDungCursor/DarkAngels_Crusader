@@ -82,6 +82,24 @@ class GridOverlayComponent extends PositionComponent
           );
           _drawTileGlyph(canvas, rect, Icons.cell_tower, const Color(0xFF33D6A6));
         }
+        if (snapshot.activationPhase == ActivationPhase.deployment) {
+          if (snapshot.map.marineSpawns.contains(tile)) {
+            canvas.drawRect(
+              rect,
+              Paint()..color = const Color(0x3333D6A6),
+            );
+            canvas.drawRect(
+              rect.deflate(2),
+              Paint()
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = 2
+                ..color = const Color(0xAA33D6A6),
+            );
+          }
+          if (snapshot.selectedDropZones.contains(tile)) {
+            _drawTileGlyph(canvas, rect, Icons.my_location, const Color(0xFF33D6A6));
+          }
+        }
         if (snapshot.highlightedTiles.contains(tile)) {
           var paint = _movePaint;
           if (snapshot.actionMode == ActionMode.move) {

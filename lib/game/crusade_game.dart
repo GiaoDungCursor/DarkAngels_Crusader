@@ -1,8 +1,10 @@
-import 'dart:math';
+
 
 import 'package:flame/components.dart';
 import 'package:flame/game.dart';
+import 'package:flame/effects.dart';
 import 'package:flame_audio/flame_audio.dart';
+import 'package:flutter/animation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/grid_position.dart';
@@ -37,6 +39,10 @@ class CrusadeGame extends FlameGame {
   final Map<GridPosition, EnemyBaseComponent> _baseComponents = {};
   final List<CoverComponent> _coverComponents = [];
 
+  bool _cutsceneActive = false;
+  bool _hasTriggeredDeployment = false;
+  bool get isCutsceneActive => _cutsceneActive;
+
   @override
   Future<void> onLoad() async {
     await super.onLoad();
@@ -54,36 +60,17 @@ class CrusadeGame extends FlameGame {
     _gridOverlay = GridOverlayComponent()..priority = 1;
     world.add(_gridOverlay);
 
-    // Calculate orbital drop initial position
-    var sumX = 0.0;
-    var sumY = 0.0;
-    for (final spawn in state.map.marineSpawns) {
-      final w = gridToWorld(spawn);
-      sumX += w.x;
-      sumY += w.y;
-    }
-    final targetPos = state.map.marineSpawns.isNotEmpty 
-      ? Vector2(sumX / state.map.marineSpawns.length, sumY / state.map.marineSpawns.length)
-      : Vector2(state.map.width * tileSize / 2, state.map.height * tileSize / 2);
-
-    _cutsceneStartPos = targetPos;
-    _cutsceneEndPos = Vector2(
+    final centerPos = Vector2(
       state.map.width * tileSize / 2,
       state.map.height * tileSize / 2,
     );
 
-    camera.viewfinder.position = targetPos;
-    camera.viewfinder.zoom = 1.8;
+    // Start slightly high up and zoomed out to see the orbital drop / deployment
+    camera.viewfinder.position = Vector2(centerPos.x, centerPos.y - 300);
+    camera.viewfinder.zoom = 0.8;
 
     _syncFromState(force: true);
   }
-
-  double _cutsceneTimer = 0.0;
-  bool _cutsceneActive = true;
-  bool get isCutsceneActive => _cutsceneActive;
-  late Vector2 _cutsceneStartPos;
-  late Vector2 _cutsceneEndPos;
-
 
   Future<void> changeBackground(String imageName) async {
     final mapSprite = await loadSprite(imageName);
@@ -187,25 +174,35 @@ class CrusadeGame extends FlameGame {
   @override
   void update(double dt) {
     super.update(dt);
-    
-    if (_cutsceneActive) {
-      _cutsceneTimer += dt;
-      if (_cutsceneTimer > 1.2) {
-        // Delay 1.2s before panning
-        final t = ((_cutsceneTimer - 1.2) / 1.5).clamp(0.0, 1.0);
-        // easeInOutCubic approximation
-        final ease = t < 0.5 ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3) / 2;
-        
-        camera.viewfinder.zoom = 1.8 - (1.8 - 1.08) * ease;
-        camera.viewfinder.position = _cutsceneStartPos + (_cutsceneEndPos - _cutsceneStartPos) * ease;
-        
-        if (t >= 1.0) {
-          _cutsceneActive = false;
-        }
-      }
-    }
 
     Future.microtask(() {
+      final state = ref.read(gameStateProvider);
+      if (state.activationPhase == ActivationPhase.marines && !_hasTriggeredDeployment) {
+        _hasTriggeredDeployment = true;
+        _cutsceneActive = true;
+        
+        final centerPos = Vector2(
+          state.map.width * tileSize / 2,
+          state.map.height * tileSize / 2,
+        );
+
+        camera.viewfinder.add(
+          MoveEffect.to(
+            centerPos,
+            EffectController(duration: 1.5, curve: Curves.easeOutCubic),
+            onComplete: () {
+              _cutsceneActive = false;
+            },
+          ),
+        );
+        camera.viewfinder.add(
+          ScaleEffect.to(
+            Vector2.all(1.08),
+            EffectController(duration: 2.0, curve: Curves.easeOutCubic),
+          ),
+        );
+      }
+
       ref.read(gameStateProvider.notifier).tickSimulation(dt);
       _syncFromState();
     });
@@ -273,6 +270,8 @@ class CrusadeGame extends FlameGame {
   }
 
   void _syncMarines(GameState state) {
+    if (state.activationPhase == ActivationPhase.deployment) return;
+
     for (var i = 0; i < state.squad.length; i++) {
       final marine = state.squad[i];
       final component = _marineComponents[i];

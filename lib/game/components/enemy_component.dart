@@ -34,10 +34,10 @@ class EnemyComponent extends SpriteGroupComponent<UnitState>
     await super.onLoad();
 
     sprites = {
-      UnitState.idle: await game.loadSprite('enemy_idle.png'),
-      UnitState.walk: await game.loadSprite('enemy_walk.png'),
-      UnitState.attack: await game.loadSprite('enemy_attack.png'),
-      UnitState.dead: await game.loadSprite('enemy_dead.png'),
+      UnitState.idle: await game.loadSprite('sprites/enemies/enemy_idle.png'),
+      UnitState.walk: await game.loadSprite('sprites/enemies/enemy_walk.png'),
+      UnitState.attack: await game.loadSprite('sprites/enemies/enemy_attack.png'),
+      UnitState.dead: await game.loadSprite('sprites/enemies/enemy_dead.png'),
     };
     current = UnitState.idle;
 

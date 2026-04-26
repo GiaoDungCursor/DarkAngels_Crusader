@@ -20,8 +20,8 @@ class Marine {
   Offset? targetPosition; // For RTS movement
   List<GridPosition> commandPath;
   double commandProgress;
-  bool hasMoved;
-  bool hasAttacked;
+  int actionPoints;
+  int maxActionPoints;
   bool isOverwatching;
 
   Marine({
@@ -39,8 +39,8 @@ class Marine {
     this.targetPosition,
     this.commandPath = const [],
     this.commandProgress = 0,
-    this.hasMoved = false,
-    this.hasAttacked = false,
+    this.actionPoints = 2,
+    this.maxActionPoints = 2,
     this.isOverwatching = false,
   });
 
@@ -54,8 +54,8 @@ class Marine {
     Weapon? weapon,
     Armor? armor,
     Perk? perk,
-    bool? hasMoved,
-    bool? hasAttacked,
+    int? actionPoints,
+    int? maxActionPoints,
     bool? isOverwatching,
   }) {
     return Marine(
@@ -73,8 +73,8 @@ class Marine {
       targetPosition: targetPosition ?? this.targetPosition,
       commandPath: commandPath ?? this.commandPath,
       commandProgress: commandProgress ?? this.commandProgress,
-      hasMoved: hasMoved ?? this.hasMoved,
-      hasAttacked: hasAttacked ?? this.hasAttacked,
+      actionPoints: actionPoints ?? this.actionPoints,
+      maxActionPoints: maxActionPoints ?? this.maxActionPoints,
       isOverwatching: isOverwatching ?? this.isOverwatching,
     );
   }

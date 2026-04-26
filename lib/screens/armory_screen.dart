@@ -44,7 +44,7 @@ class ArmoryScreen extends ConsumerWidget {
             child: Container(
               decoration: BoxDecoration(
                 image: const DecorationImage(
-                  image: AssetImage('assets/images/armory_background.png'),
+                  image: AssetImage('assets/images/backgrounds/armory_background.png'),
                   fit: BoxFit.cover,
                 ),
                 borderRadius: BorderRadius.circular(12),

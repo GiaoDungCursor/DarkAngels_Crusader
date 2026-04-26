@@ -19,13 +19,8 @@ class MarineTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final hpPercent = marine.maxHp > 0 ? marine.hp / marine.maxHp : 0.0;
 
-    final actionText = switch ((marine.hasMoved, marine.hasAttacked)) {
-      (true, true) => 'spent',
-      (true, false) => 'moved',
-      (false, true) => 'fired',
-      _ => 'ready',
-    };
-    final isSpent = marine.hasMoved && marine.hasAttacked;
+    final isSpent = marine.actionPoints == 0;
+    final actionText = isSpent ? 'spent' : 'AP: ${marine.actionPoints}/${marine.maxActionPoints}';
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),

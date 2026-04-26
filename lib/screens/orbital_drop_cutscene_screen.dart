@@ -21,7 +21,7 @@ class OrbitalDropCutsceneScreen extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           Image.asset(
-            'assets/images/drop_pod_landing_splash.png',
+            'assets/images/backgrounds/drop_pod_landing_splash.png',
             fit: BoxFit.cover,
           ),
           DecoratedBox(

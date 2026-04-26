@@ -12,7 +12,7 @@ class EnemyBaseComponent extends SpriteComponent with HasGameReference<CrusadeGa
 
   @override
   Future<void> onLoad() async {
-    sprite = await game.loadSprite('enemy_base.png');
+    sprite = await game.loadSprite('sprites/objects/enemy_base.png');
     anchor = Anchor.center;
     position = game.gridToWorld(gridPosition);
   }
@@ -20,7 +20,7 @@ class EnemyBaseComponent extends SpriteComponent with HasGameReference<CrusadeGa
   Future<void> showPlantedBomb() async {
     if (_bombIndicator != null) return;
     
-    final bombSprite = await game.loadSprite('bomb.png');
+    final bombSprite = await game.loadSprite('sprites/objects/bomb.png');
     _bombIndicator = SpriteComponent(
       sprite: bombSprite,
       size: Vector2.all(CrusadeGame.tileSize * 0.4),

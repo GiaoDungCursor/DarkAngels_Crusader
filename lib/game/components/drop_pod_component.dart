@@ -18,7 +18,7 @@ class DropPodComponent extends SpriteComponent with HasGameReference<CrusadeGame
 
   @override
   Future<void> onLoad() async {
-    sprite = await game.loadSprite('drop_pod.png');
+    sprite = await game.loadSprite('sprites/objects/drop_pod.png');
     
     // Start high up above the target
     position = Vector2(targetPosition.x, targetPosition.y - 800);

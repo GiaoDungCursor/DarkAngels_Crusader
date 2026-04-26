@@ -33,12 +33,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Mission Control'), findsOneWidget);
-    expect(find.text('How To Play'), findsOneWidget);
-    expect(find.text('Deployed Marines'), findsOneWidget);
-    expect(find.text('Reserve'), findsOneWidget);
-    expect(find.text('Drop Zone Epsilon'), findsAtLeastNWidgets(1));
-    expect(find.text('Move 2'), findsAtLeastNWidgets(1));
-    expect(find.text('Shoot 3'), findsAtLeastNWidgets(1));
-    expect(find.text('END TURN'), findsOneWidget);
+    expect(find.text('PLANETFALL PROTOCOL INITIATED'), findsOneWidget);
+    expect(find.text('CONFIRM DROP'), findsOneWidget);
   });
 }

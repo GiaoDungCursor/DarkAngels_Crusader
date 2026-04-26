@@ -10,46 +10,64 @@ class MainMenuScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      backgroundColor: const Color(0xFF070A0E),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.public, size: 80, color: Color(0xFFD8A93A)),
-            const SizedBox(height: 20),
-            const Text(
-              'DARK ANGELS',
-              style: TextStyle(
-                fontSize: 48,
-                fontWeight: FontWeight.w900,
-                color: Colors.white,
-                letterSpacing: 8.0,
+      body: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF070A0E),
+          image: DecorationImage(
+            image: AssetImage('assets/images/backgrounds/main_menu_bg.png'),
+            fit: BoxFit.cover,
+            colorFilter: ColorFilter.mode(
+              Color(0xB3000000), // 70% black overlay for readability
+              BlendMode.darken,
+            ),
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.public, size: 80, color: Color(0xFFD8A93A)),
+              const SizedBox(height: 20),
+              const Text(
+                'DARK ANGELS',
+                style: TextStyle(
+                  fontSize: 48,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                  letterSpacing: 8.0,
+                  shadows: [
+                    Shadow(color: Colors.black, blurRadius: 10, offset: Offset(0, 4)),
+                  ],
+                ),
               ),
-            ),
-            const Text(
-              'CRUSADE COMMAND',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFFB9C3CC),
-                letterSpacing: 4.0,
+              const Text(
+                'CRUSADE COMMAND',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFFB9C3CC),
+                  letterSpacing: 4.0,
+                  shadows: [
+                    Shadow(color: Colors.black, blurRadius: 10, offset: Offset(0, 4)),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 80),
-            _MenuButton(
-              label: 'START CAMPAIGN',
-              onTap: () {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => const HubScreen()),
-                );
-              },
-            ),
-            const SizedBox(height: 16),
-            _MenuButton(
-              label: 'SETTINGS',
-              onTap: () => _showSettingsDialog(context, ref),
-            ),
-          ],
+              const SizedBox(height: 80),
+              _MenuButton(
+                label: 'START CAMPAIGN',
+                onTap: () {
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(builder: (_) => const HubScreen()),
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              _MenuButton(
+                label: 'SETTINGS',
+                onTap: () => _showSettingsDialog(context, ref),
+              ),
+            ],
+          ),
         ),
       ),
     );

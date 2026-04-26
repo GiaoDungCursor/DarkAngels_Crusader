@@ -19,7 +19,7 @@ class BulletComponent extends SpriteComponent
   @override
   Future<void> onLoad() async {
     await super.onLoad();
-    sprite = await game.loadSprite('projectile.png');
+    sprite = await game.loadSprite('sprites/objects/projectile.png');
     final direction = (target - position).normalized();
     angle = direction.screenAngle();
     add(

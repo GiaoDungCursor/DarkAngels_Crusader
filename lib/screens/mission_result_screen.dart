@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/mission.dart';
@@ -25,10 +27,13 @@ class MissionResultScreen extends StatelessWidget {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Image.asset(
-            'assets/images/drop_pod_landing_splash.png',
-            fit: BoxFit.cover,
-          ),
+          if (victory)
+            const _VictoryCutscene()
+          else
+            Image.asset(
+              'assets/images/backgrounds/drop_pod_landing_splash.png',
+              fit: BoxFit.cover,
+            ),
           DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -266,6 +271,53 @@ class _StatChip extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _VictoryCutscene extends StatefulWidget {
+  const _VictoryCutscene();
+
+  @override
+  State<_VictoryCutscene> createState() => _VictoryCutsceneState();
+}
+
+class _VictoryCutsceneState extends State<_VictoryCutscene> {
+  int _currentIndex = 1;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(milliseconds: 2500), (timer) {
+      if (!mounted) return;
+      if (_currentIndex < 4) {
+        setState(() => _currentIndex++);
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 1500),
+      switchInCurve: Curves.easeIn,
+      switchOutCurve: Curves.easeOut,
+      child: Image.asset(
+        'assets/images/cutscenes/victory_cutscene_$_currentIndex.png',
+        key: ValueKey(_currentIndex),
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
       ),
     );
   }

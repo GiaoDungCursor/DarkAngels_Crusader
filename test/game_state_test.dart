@@ -10,8 +10,8 @@ void main() {
     final map = campaignMaps.first;
     final path = const Pathfinder().findPath(
       map: map,
-      start: const GridPosition(4, 4),
-      goal: const GridPosition(8, 4),
+      start: const GridPosition(3, 2),
+      goal: const GridPosition(8, 2),
       blockers: map.coverTiles,
     );
 
@@ -23,13 +23,13 @@ void main() {
     final map = campaignMaps.first;
     final reachable = const Pathfinder().reachable(
       map: map,
-      start: const GridPosition(2, 7),
+      start: const GridPosition(3, 2),
       maxSteps: 2,
       blockers: map.coverTiles,
     );
 
     expect(
-      reachable.every((tile) => tile.distanceTo(const GridPosition(2, 7)) <= 2),
+      reachable.every((tile) => tile.distanceTo(const GridPosition(3, 2)) <= 2),
       isTrue,
     );
     expect(reachable.any(map.coverTiles.contains), isFalse);
@@ -40,30 +40,33 @@ void main() {
     expect(
       const Pathfinder().hasLineOfSight(
         map: map,
-        from: const GridPosition(3, 7),
-        to: const GridPosition(6, 7),
+        from: const GridPosition(3, 2),
+        to: const GridPosition(8, 2),
       ),
       isFalse,
     );
   });
 
-  test('marine activations advance one character at a time', () {
+  void setupMarinesPhase(GameStateNotifier notifier, GameState state) {
+    final map = state.map;
+    final spawns = map.marineSpawns.toList();
+    for (int i = 0; i < state.squad.length; i++) {
+      notifier.toggleDropZone(spawns[i]);
+    }
+    notifier.confirmDeployment();
+  }
+
+  test('squad turn advances directly to enemy phase', () {
     final container = ProviderContainer();
     addTearDown(container.dispose);
     final notifier = container.read(gameStateProvider.notifier);
+    setupMarinesPhase(notifier, container.read(gameStateProvider));
 
-    expect(container.read(gameStateProvider).selectedMarineIndex, 0);
-    notifier.endPlayerTurn();
-    expect(container.read(gameStateProvider).selectedMarineIndex, 1);
-
-    for (var i = 0; i < 3; i++) {
-      notifier.endPlayerTurn();
-    }
-
+    notifier.endSquadTurn();
     final state = container.read(gameStateProvider);
     expect(state.activationPhase, ActivationPhase.marines);
     expect(state.activationRound, 2);
-    expect(state.selectedMarineIndex, 0);
+    expect(state.squad.every((marine) => marine.actionPoints == 2), isTrue);
     expect(state.squad.length, 4);
     expect(state.reserveSquad.length, 6);
   });
@@ -72,9 +75,10 @@ void main() {
     final container = ProviderContainer();
     addTearDown(container.dispose);
     final notifier = container.read(gameStateProvider.notifier);
+    setupMarinesPhase(notifier, container.read(gameStateProvider));
 
-    for (var i = 0; i < 4; i++) {
-      notifier.endPlayerTurn();
+    for (var i = 0; i < 2; i++) {
+      notifier.endSquadTurn();
     }
 
     final state = container.read(gameStateProvider);
@@ -95,6 +99,7 @@ void main() {
     final container = ProviderContainer();
     addTearDown(container.dispose);
     final notifier = container.read(gameStateProvider.notifier);
+    setupMarinesPhase(notifier, container.read(gameStateProvider));
 
     expect(container.read(gameStateProvider).squad.length, 4);
     expect(container.read(gameStateProvider).reserveSquad.length, 6);
@@ -110,6 +115,7 @@ void main() {
     final container = ProviderContainer();
     addTearDown(container.dispose);
     final notifier = container.read(gameStateProvider.notifier);
+    setupMarinesPhase(notifier, container.read(gameStateProvider));
 
     notifier.selectReserveForDeployment(0);
     final planning = container.read(gameStateProvider);
@@ -130,16 +136,25 @@ void main() {
     final container = ProviderContainer();
     addTearDown(container.dispose);
     final notifier = container.read(gameStateProvider.notifier);
+    setupMarinesPhase(notifier, container.read(gameStateProvider));
 
-    final start = container
-        .read(gameStateProvider)
-        .selectedMarine!
-        .gridPosition;
-    final target = GridPosition(start.x, start.y - 1);
-    expect(notifier.issueMove(target), isTrue);
+    GridPosition? target;
+    for (int i = 0; i < container.read(gameStateProvider).squad.length; i++) {
+      notifier.selectMarine(i);
+      notifier.setActionMode(ActionMode.move);
+      final st = container.read(gameStateProvider);
+      
+      final reachable = st.reachableTiles;
+      if (reachable.isNotEmpty) {
+        target = reachable.first;
+        expect(notifier.issueMove(target), isTrue);
+        break;
+      }
+    }
 
     final state = container.read(gameStateProvider);
+    expect(target, isNotNull);
     expect(state.selectedMarine!.gridPosition, target);
-    expect(state.selectedMarine!.hasMoved, isTrue);
+    expect(state.selectedMarine!.actionPoints, 1);
   });
 }
