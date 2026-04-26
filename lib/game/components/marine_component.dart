@@ -9,7 +9,7 @@ import '../../models/marine.dart';
 import '../crusade_game.dart';
 import 'unit_state.dart';
 
-class MarineComponent extends SpriteGroupComponent<UnitState>
+class MarineComponent extends SpriteAnimationGroupComponent<UnitState>
     with HasGameReference<CrusadeGame>, TapCallbacks {
   MarineComponent({
     required this.index,
@@ -29,20 +29,34 @@ class MarineComponent extends SpriteGroupComponent<UnitState>
   RectangleComponent? _actedBadge;
   double _idleTime = 0;
 
+  Future<SpriteAnimation> _loadAnim(String path) async {
+    final img = await game.images.load(path);
+    final isSpriteSheet = path.contains('spritesheet');
+    if (isSpriteSheet) {
+      return SpriteAnimation.fromFrameData(
+        img,
+        SpriteAnimationData.sequenced(
+          amount: 4,
+          amountPerRow: 2,
+          stepTime: 0.15,
+          textureSize: Vector2(img.width / 2, img.height / 2),
+        ),
+      );
+    } else {
+      return SpriteAnimation.spriteList([Sprite(img)], stepTime: 1.0);
+    }
+  }
+
   @override
   Future<void> onLoad() async {
     await super.onLoad();
 
-    final idleSprite = await game.loadSprite('sprites/marines/marine_idle.png');
-    final walkSprite = await game.loadSprite('sprites/marines/marine_walk.png');
-    final attackSprite = await game.loadSprite('sprites/marines/marine_attack.png');
-    final deadSprite = await game.loadSprite('sprites/marines/marine_dead.png');
-
-    sprites = {
-      UnitState.idle: idleSprite,
-      UnitState.walk: walkSprite,
-      UnitState.attack: attackSprite,
-      UnitState.dead: deadSprite,
+    final key = marineState.spriteKey;
+    animations = {
+      UnitState.idle: await _loadAnim('sprites/marines/${key}_idle.png'),
+      UnitState.walk: await _loadAnim('sprites/marines/${key}_walk.png'),
+      UnitState.attack: await _loadAnim('sprites/marines/${key}_attack.png'),
+      UnitState.dead: await _loadAnim('sprites/marines/${key}_dead.png'),
     };
 
     current = UnitState.idle;
@@ -67,6 +81,7 @@ class MarineComponent extends SpriteGroupComponent<UnitState>
 
     if (position.distanceTo(target) > 1) {
       current = UnitState.walk;
+      children.whereType<MoveToEffect>().forEach((e) => e.removeFromParent());
       add(
         MoveToEffect(
           target,

@@ -1,5 +1,3 @@
-
-
 import 'package:flame/components.dart';
 import 'package:flame/game.dart';
 import 'package:flame/effects.dart';
@@ -41,7 +39,11 @@ class CrusadeGame extends FlameGame {
 
   bool _cutsceneActive = false;
   bool _hasTriggeredDeployment = false;
+  bool _hasSpawnedDropPod = false;
   bool get isCutsceneActive => _cutsceneActive;
+
+  bool _isFullyLoaded = false;
+  bool get isFullyLoaded => _isFullyLoaded;
 
   @override
   Future<void> onLoad() async {
@@ -60,16 +62,8 @@ class CrusadeGame extends FlameGame {
     _gridOverlay = GridOverlayComponent()..priority = 1;
     world.add(_gridOverlay);
 
-    final centerPos = Vector2(
-      state.map.width * tileSize / 2,
-      state.map.height * tileSize / 2,
-    );
-
-    // Start slightly high up and zoomed out to see the orbital drop / deployment
-    camera.viewfinder.position = Vector2(centerPos.x, centerPos.y - 300);
-    camera.viewfinder.zoom = 0.8;
-
-    _syncFromState(force: true);
+    // Don't sync yet - wait for startMission to be called from CommandScreen
+    _isFullyLoaded = true;
   }
 
   Future<void> changeBackground(String imageName) async {
@@ -174,22 +168,26 @@ class CrusadeGame extends FlameGame {
   @override
   void update(double dt) {
     super.update(dt);
+    if (!_isFullyLoaded) return;
 
     Future.microtask(() {
       final state = ref.read(gameStateProvider);
-      if (state.activationPhase == ActivationPhase.marines && !_hasTriggeredDeployment) {
+      if (state.activationPhase == ActivationPhase.marines &&
+          !_hasTriggeredDeployment) {
         _hasTriggeredDeployment = true;
         _cutsceneActive = true;
-        
-        final centerPos = Vector2(
-          state.map.width * tileSize / 2,
-          state.map.height * tileSize / 2,
-        );
+
+        final dropZone = state.selectedDropZones.isNotEmpty
+            ? state.selectedDropZones.first
+            : (state.squad.isNotEmpty ? state.squad.first.gridPosition : null);
+        final dropFocus = dropZone == null
+            ? _mapCenter(state)
+            : gridToWorld(dropZone);
 
         camera.viewfinder.add(
           MoveEffect.to(
-            centerPos,
-            EffectController(duration: 1.5, curve: Curves.easeOutCubic),
+            dropFocus,
+            EffectController(duration: 1.15, curve: Curves.easeOutCubic),
             onComplete: () {
               _cutsceneActive = false;
             },
@@ -197,8 +195,8 @@ class CrusadeGame extends FlameGame {
         );
         camera.viewfinder.add(
           ScaleEffect.to(
-            Vector2.all(1.08),
-            EffectController(duration: 2.0, curve: Curves.easeOutCubic),
+            Vector2.all(1.15),
+            EffectController(duration: 1.7, curve: Curves.easeOutCubic),
           ),
         );
       }
@@ -209,6 +207,7 @@ class CrusadeGame extends FlameGame {
   }
 
   void _syncFromState({bool force = false}) {
+    if (!_isFullyLoaded) return;
     final state = ref.read(gameStateProvider);
     if (!force && state.revision == _lastRevision) return;
     _lastRevision = state.revision;
@@ -270,8 +269,16 @@ class CrusadeGame extends FlameGame {
   }
 
   void _syncMarines(GameState state) {
-    if (state.activationPhase == ActivationPhase.deployment) return;
+    // Determine if this is the initial deployment drop (all marines are new)
+    final isInitialDrop = _marineComponents.isEmpty && state.squad.isNotEmpty;
+    final initialDropZone = state.selectedDropZones.isNotEmpty
+        ? state.selectedDropZones.first
+        : (state.squad.isNotEmpty ? state.squad.first.gridPosition : null);
+    final initialDropWorld = initialDropZone == null
+        ? null
+        : gridToWorld(initialDropZone);
 
+    // Add any new marine components (hidden initially during drop pod animation)
     for (var i = 0; i < state.squad.length; i++) {
       final marine = state.squad[i];
       final component = _marineComponents[i];
@@ -279,23 +286,52 @@ class CrusadeGame extends FlameGame {
         final newComponent = MarineComponent(
           index: i,
           marine: marine,
-          position: gridToWorld(marine.gridPosition),
+          position: isInitialDrop && initialDropWorld != null
+              ? initialDropWorld.clone()
+              : gridToWorld(marine.gridPosition),
         )..priority = 4;
         _marineComponents[i] = newComponent;
         world.add(newComponent);
-        newComponent.sync(marine, selected: i == state.selectedMarineIndex);
-        newComponent.opacity = 0; // Hide initially for drop pod
-
-        final dropPod = DropPodComponent(
-          gridPosition: marine.gridPosition,
-          targetPosition: gridToWorld(marine.gridPosition),
-          onLanded: () {
-            newComponent.opacity = 1.0;
-          },
-        )..priority = 5;
-        world.add(dropPod);
+        if (!isInitialDrop) {
+          newComponent.sync(marine, selected: i == state.selectedMarineIndex);
+        }
+        // Hide all marines initially – they reveal on pod landing
+        if (isInitialDrop) newComponent.opacity = 0;
       } else {
         component.sync(marine, selected: i == state.selectedMarineIndex);
+      }
+    }
+
+    // Spawn exactly ONE drop pod at the selectedDropZone (or squad leader position)
+    // only on the very first sync where marines appear.
+    if (isInitialDrop && !_hasSpawnedDropPod) {
+      _hasSpawnedDropPod = true;
+      final dropZone = initialDropZone;
+
+      if (dropZone != null) {
+        final pod = DropPodComponent(
+          gridPosition: dropZone,
+          targetPosition: gridToWorld(dropZone),
+          onLanded: () {
+            // Reveal marines at the pod, then animate them out to their
+            // planned insertion tiles.
+            for (var i = 0; i < state.squad.length; i++) {
+              final component = _marineComponents[i];
+              if (component == null) continue;
+              component.opacity = 1.0;
+              component.sync(
+                state.squad[i],
+                selected: i == state.selectedMarineIndex,
+              );
+            }
+          },
+        )..priority = 5;
+        world.add(pod);
+      } else {
+        // No drop zone – reveal marines immediately
+        for (final c in _marineComponents.values) {
+          c.opacity = 1.0;
+        }
       }
     }
   }
@@ -360,5 +396,61 @@ class CrusadeGame extends FlameGame {
           });
     }
     FlameAudio.play(fileName, volume: 0.55);
+  }
+
+  /// Called from CommandScreen after startMission() updates the state.
+  /// Clears all existing entity components and re-syncs from scratch.
+  void resetWorld() {
+    // Clear all existing unit components
+    for (final c in _marineComponents.values) {
+      c.removeFromParent();
+    }
+    _marineComponents.clear();
+    for (final c in _enemyComponents.values) {
+      c.removeFromParent();
+    }
+    _enemyComponents.clear();
+    for (final c in _baseComponents.values) {
+      c.removeFromParent();
+    }
+    _baseComponents.clear();
+    for (final c in _coverComponents) {
+      c.removeFromParent();
+    }
+    _coverComponents.clear();
+    _lastCoverKey = '';
+    _lastRevision = -1;
+    _hasTriggeredDeployment = false;
+    _hasSpawnedDropPod = false;
+
+    final state = ref.read(gameStateProvider);
+
+    // Update background to match new map
+    _background.size = Vector2(
+      state.map.width * tileSize,
+      state.map.height * tileSize,
+    );
+
+    final dropZone = state.selectedDropZones.isNotEmpty
+        ? state.selectedDropZones.first
+        : (state.squad.isNotEmpty ? state.squad.first.gridPosition : null);
+    final centerPos = dropZone == null
+        ? _mapCenter(state)
+        : gridToWorld(dropZone);
+
+    // Start wide above the insertion point so the player sees the orbital
+    // impact before the camera settles into command zoom.
+    camera.viewfinder.position = Vector2(centerPos.x, centerPos.y - 420);
+    camera.viewfinder.zoom = 0.55;
+
+    // Now sync all components from the fresh state
+    _syncFromState(force: true);
+  }
+
+  Vector2 _mapCenter(GameState state) {
+    return Vector2(
+      state.map.width * tileSize / 2,
+      state.map.height * tileSize / 2,
+    );
   }
 }

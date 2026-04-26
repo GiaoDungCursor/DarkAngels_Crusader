@@ -2,7 +2,13 @@ import 'package:flutter/material.dart';
 
 import 'grid_position.dart';
 
-enum ObjectiveType { survive, eliminateAll, destroyBeacon, destroyBase, extract }
+enum ObjectiveType {
+  survive,
+  eliminateAll,
+  destroyBeacon,
+  destroyBase,
+  extract,
+}
 
 enum TileKind {
   floor,
@@ -16,6 +22,7 @@ enum TileKind {
   enemySpawn,
   enemyBase,
   hazard,
+  dropZone,
 }
 
 class MissionObjective {
@@ -64,9 +71,11 @@ class TacticalMap {
     required this.hazardTiles,
     required this.objectiveTiles,
     required this.extractionTiles,
+    required this.dropZones,
     required this.marineSpawns,
     required this.enemySpawns,
     required this.enemyBaseTiles,
+    this.bossSpawn,
     required this.objectives,
     required this.rewardRP,
     required this.threat,
@@ -88,9 +97,11 @@ class TacticalMap {
   final Set<GridPosition> hazardTiles;
   final Set<GridPosition> objectiveTiles;
   final Set<GridPosition> extractionTiles;
+  final List<GridPosition> dropZones;
   final List<GridPosition> marineSpawns;
   final List<GridPosition> enemySpawns;
   final Set<GridPosition> enemyBaseTiles;
+  final GridPosition? bossSpawn;
   final List<MissionObjective> objectives;
   final int rewardRP;
   final int threat;
@@ -113,12 +124,12 @@ class TacticalMap {
   }
 
   bool blocksLineOfSight(GridPosition tile) {
-    return blockedTiles.contains(tile) || coverTiles.contains(tile) || enemyBaseTiles.contains(tile);
+    return blockedTiles.contains(tile) ||
+        coverTiles.contains(tile) ||
+        enemyBaseTiles.contains(tile);
   }
 
-  TacticalMap copyWith({
-    Set<GridPosition>? coverTiles,
-  }) {
+  TacticalMap copyWith({Set<GridPosition>? coverTiles}) {
     return TacticalMap(
       id: id,
       name: name,
@@ -135,9 +146,11 @@ class TacticalMap {
       hazardTiles: hazardTiles,
       objectiveTiles: objectiveTiles,
       extractionTiles: extractionTiles,
+      dropZones: dropZones,
       marineSpawns: marineSpawns,
       enemySpawns: enemySpawns,
       enemyBaseTiles: enemyBaseTiles,
+      bossSpawn: bossSpawn,
       objectives: objectives,
       rewardRP: rewardRP,
       threat: threat,
@@ -168,9 +181,11 @@ TacticalMap _tacticalMap({
   final hazardTiles = <GridPosition>{};
   final objectiveTiles = <GridPosition>{};
   final extractionTiles = <GridPosition>{};
+  final dropZones = <GridPosition>[];
   final marineSpawns = <GridPosition>[];
   final enemySpawns = <GridPosition>[];
   final enemyBaseTiles = <GridPosition>{};
+  GridPosition? bossSpawn;
 
   for (var y = 0; y < layout.length; y++) {
     final row = layout[y];
@@ -188,6 +203,8 @@ TacticalMap _tacticalMap({
         'S' => TileKind.marineSpawn,
         'E' => TileKind.enemySpawn,
         'B' => TileKind.enemyBase,
+        'D' => TileKind.dropZone,
+        'W' => TileKind.floor, // W is boss spawn, but walks on floor
         _ => TileKind.floor,
       };
       tileKinds[tile] = kind;
@@ -212,8 +229,14 @@ TacticalMap _tacticalMap({
           enemySpawns.add(tile);
         case TileKind.enemyBase:
           enemyBaseTiles.add(tile);
+        case TileKind.dropZone:
+          dropZones.add(tile);
         case TileKind.floor:
           break;
+      }
+
+      if (row[x] == 'W') {
+        bossSpawn = tile;
       }
     }
   }
@@ -234,9 +257,11 @@ TacticalMap _tacticalMap({
     hazardTiles: hazardTiles,
     objectiveTiles: objectiveTiles,
     extractionTiles: extractionTiles,
+    dropZones: dropZones,
     marineSpawns: marineSpawns,
     enemySpawns: enemySpawns,
     enemyBaseTiles: enemyBaseTiles,
+    bossSpawn: bossSpawn,
     objectives: objectives,
     rewardRP: rewardRP,
     threat: threat,
@@ -253,20 +278,20 @@ final campaignMaps = [
     background: 'maps/map_drop_zone_epsilon_generated.png',
     layout: [
       '################',
-      '#SS.CC...vv...E#',
-      '#SS.CC...bb.B.E#',
-      '#.......Cbb...E#',
+      '#D..CC...vv...E#',
+      '#...CC...bb#B.E#',
+      '#......#Cbb...E#',
       '#vvvvv...vvvvvv#',
+      '#vvvvv..##....C#',
+      '#SS..#C...O.B.C#',
+      '#..D..#C..W....#',
+      '#SS..#C...O.B.C#',
       '#vvvvv........C#',
-      '#SS....C..O.B.C#',
-      '#SS....C.......#',
-      '#SS....C..O.B.C#',
-      '#vvvvv........C#',
-      '#vvvvv...vvvvvv#',
-      '#.......Cbb...E#',
-      '#SS.CC...bb.B.E#',
-      '#SS.CC...vv...E#',
-      '#XX.......C....#',
+      '#vvvvv..##vvvvv#',
+      '#......#Cbb...E#',
+      '#...CC...bb#B.E#',
+      '#D..CC..#vv...E#',
+      '#XX....##.C....#',
       '################',
     ],
     objectives: [
@@ -296,19 +321,19 @@ final campaignMaps = [
     layout: [
       '################',
       '#X...C...vv.EE.#',
-      '#XSS.C...vv....#',
-      '#SSS.C..bbb....#',
-      '#SSS....bOb..C.#',
-      '#SS.....bOb..C.#',
+      '#XSD.C...vv....#',
+      '#.S..C..bbb....#',
+      '#.......bOb..C.#',
+      '#.......bOb..C.#',
       '#...CC..bbb....#',
       '#...CC.....vv..#',
       '#.......C..vvE.#',
-      '#..hhh..C......#',
+      '#..hhh..C...D..#',
       '#..hhh.....CC..#',
       '#......vv..CC..#',
       '#..C...vv......#',
-      '#..C......bbbE.#',
-      '#.........bbb..#',
+      '#SDC......bbbE.#',
+      '#S........bbb..#',
       '################',
     ],
     objectives: [
@@ -336,18 +361,18 @@ final campaignMaps = [
     layout: [
       '################',
       '#..vv....C..EE.#',
-      '#SSvv....C.....#',
-      '#SSbb..CC......#',
-      '#SSbb..CC..h...#',
-      '#SSvv......h...#',
-      '#SSvv..####....#',
+      '#..vv....C.....#',
+      '#SDbb..CC......#',
+      '#S.bb..CC..h...#',
+      '#..vv......h...#',
+      '#..vv..####....#',
       '#......#OO#..E.#',
       '#..C...#OO#....#',
       '#..C...####.CC.#',
       '#......hhh..CC.#',
       '#..bbb.........#',
       '#..bbb.....E...#',
-      '#XX.....vv.....#',
+      '#XXSS...vv..D..#',
       '#XX.....vv.....#',
       '################',
     ],

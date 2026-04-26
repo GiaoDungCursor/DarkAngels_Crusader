@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/mission.dart';
-import 'orbital_drop_cutscene_screen.dart';
+import 'command_screen.dart';
 
 class MissionBriefingScreen extends StatefulWidget {
   const MissionBriefingScreen({
@@ -121,7 +121,7 @@ class _MissionBriefingScreenState extends State<MissionBriefingScreen> {
     }
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (_) => OrbitalDropCutsceneScreen(
+        builder: (_) => CommandScreen(
           mission: widget.mission,
           missionIndex: widget.missionIndex,
         ),

@@ -33,6 +33,7 @@ class MissionResultScreen extends StatelessWidget {
             Image.asset(
               'assets/images/backgrounds/drop_pod_landing_splash.png',
               fit: BoxFit.cover,
+              filterQuality: FilterQuality.high,
             ),
           DecoratedBox(
             decoration: BoxDecoration(
@@ -318,6 +319,7 @@ class _VictoryCutsceneState extends State<_VictoryCutscene> {
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,
+        filterQuality: FilterQuality.high,
       ),
     );
   }

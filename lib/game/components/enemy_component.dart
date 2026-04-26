@@ -10,7 +10,7 @@ import '../../providers/game_state_provider.dart';
 import '../crusade_game.dart';
 import 'unit_state.dart';
 
-class EnemyComponent extends SpriteGroupComponent<UnitState>
+class EnemyComponent extends SpriteAnimationGroupComponent<UnitState>
     with HasGameReference<CrusadeGame>, TapCallbacks {
   EnemyComponent({
     required this.enemyId,
@@ -19,7 +19,11 @@ class EnemyComponent extends SpriteGroupComponent<UnitState>
   }) : enemyState = enemy,
        super(
          position: position,
-         size: Vector2.all(CrusadeGame.tileSize * 0.76),
+         size: Vector2.all(
+           enemy.kind == EnemyKind.orkWarboss
+               ? CrusadeGame.tileSize * 2.2
+               : CrusadeGame.tileSize * 0.76,
+         ),
        ) {
     anchor = Anchor.center;
   }
@@ -29,21 +33,42 @@ class EnemyComponent extends SpriteGroupComponent<UnitState>
   RectangleComponent? _hpBar;
   double _idleTime = 0;
 
+  Future<SpriteAnimation> _loadAnim(String path) async {
+    final img = await game.images.load(path);
+    final isGrid = path.contains('spritesheet');
+    if (isGrid) {
+      return SpriteAnimation.fromFrameData(
+        img,
+        SpriteAnimationData.sequenced(
+          amount: 4,
+          amountPerRow: 2,
+          stepTime: 0.15,
+          textureSize: Vector2(img.width / 2, img.height / 2),
+        ),
+      );
+    } else {
+      return SpriteAnimation.spriteList([Sprite(img)], stepTime: 1.0);
+    }
+  }
+
   @override
   Future<void> onLoad() async {
     await super.onLoad();
 
-    sprites = {
-      UnitState.idle: await game.loadSprite('sprites/enemies/enemy_idle.png'),
-      UnitState.walk: await game.loadSprite('sprites/enemies/enemy_walk.png'),
-      UnitState.attack: await game.loadSprite('sprites/enemies/enemy_attack.png'),
-      UnitState.dead: await game.loadSprite('sprites/enemies/enemy_dead.png'),
+    final isBoss = enemyState.kind == EnemyKind.orkWarboss;
+    final prefix = isBoss ? 'ork_warboss' : 'enemy';
+
+    animations = {
+      UnitState.idle: await _loadAnim('sprites/enemies/${prefix}_idle.png'),
+      UnitState.walk: await _loadAnim('sprites/enemies/${prefix}_walk.png'),
+      UnitState.attack: await _loadAnim('sprites/enemies/${prefix}_attack.png'),
+      UnitState.dead: await _loadAnim('sprites/enemies/${prefix}_dead.png'),
     };
     current = UnitState.idle;
 
     _hpBar = RectangleComponent(
-      position: Vector2(6, -8),
-      size: Vector2(size.x - 12, 5),
+      position: Vector2(size.x * 0.1, -12),
+      size: Vector2(size.x * 0.8, 4),
       paint: Paint()..color = const Color(0xFFFF6B5F),
     );
     add(_hpBar!);
@@ -66,6 +91,7 @@ class EnemyComponent extends SpriteGroupComponent<UnitState>
 
     if (position.distanceTo(target) > 1) {
       current = UnitState.walk;
+      children.whereType<MoveToEffect>().forEach((e) => e.removeFromParent());
       add(
         MoveToEffect(
           target,
@@ -103,55 +129,75 @@ class EnemyComponent extends SpriteGroupComponent<UnitState>
   @override
   void render(Canvas canvas) {
     super.render(canvas);
-    
+
     // Only draw intent during marine phase and when alive
     final state = game.gameState;
-    if (enemyState.hp <= 0 || state.activationPhase != ActivationPhase.marines) {
+    if (enemyState.hp <= 0 ||
+        state.activationPhase != ActivationPhase.marines) {
       return;
     }
 
     final target = state.getTargetFor(enemyState);
-    if (target != null) {
-      final targetWorldPos = game.gridToWorld(target.gridPosition);
-      final localTarget = targetWorldPos - position;
-      
-      final paint = Paint()
-        ..color = const Color(0x66FF6B5F)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2;
-      
-      // Draw dashed line
-      _drawDashedLine(canvas, Offset.zero, Offset(localTarget.x, localTarget.y), paint, 4, 4);
-      
-      // Draw intent icon (e.g. an exclamation mark or target indicator) at the end or midway
-      final iconPaint = TextPainter(
-        text: const TextSpan(
-          text: '!',
-          style: TextStyle(
-            color: Color(0xFFFF6B5F),
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      
-      final midPoint = Offset(localTarget.x * 0.3, localTarget.y * 0.3);
-      iconPaint.paint(canvas, midPoint);
+    final selected = state.selectedMarine;
+    if (target == null ||
+        selected == null ||
+        selected.gridPosition.distanceTo(enemyState.position) > 6) {
+      return;
     }
+
+    final targetWorldPos = game.gridToWorld(target.gridPosition);
+    final localTarget = targetWorldPos - position;
+
+    final paint = Paint()
+      ..color = const Color(0x22FF6B5F)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
+    // Draw dashed line
+    _drawDashedLine(
+      canvas,
+      Offset.zero,
+      Offset(localTarget.x, localTarget.y),
+      paint,
+      4,
+      4,
+    );
+
+    // Draw intent icon (e.g. an exclamation mark or target indicator) at the end or midway
+    final iconPaint = TextPainter(
+      text: const TextSpan(
+        text: '!',
+        style: TextStyle(
+          color: Color(0xFFFF6B5F),
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    final midPoint = Offset(localTarget.x * 0.3, localTarget.y * 0.3);
+    iconPaint.paint(canvas, midPoint);
   }
 
-  void _drawDashedLine(Canvas canvas, Offset p1, Offset p2, Paint paint, double dash, double gap) {
+  void _drawDashedLine(
+    Canvas canvas,
+    Offset p1,
+    Offset p2,
+    Paint paint,
+    double dash,
+    double gap,
+  ) {
     var dx = p2.dx - p1.dx;
     var dy = p2.dy - p1.dy;
     final length = sqrt(dx * dx + dy * dy);
     if (length == 0) return;
-    
+
     dx /= length;
     dy /= length;
-    
+
     var currentLength = 0.0;
-    
+
     while (currentLength < length) {
       final endLength = min(currentLength + dash, length);
       canvas.drawLine(

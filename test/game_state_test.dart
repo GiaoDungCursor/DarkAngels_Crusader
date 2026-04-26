@@ -48,12 +48,7 @@ void main() {
   });
 
   void setupMarinesPhase(GameStateNotifier notifier, GameState state) {
-    final map = state.map;
-    final spawns = map.marineSpawns.toList();
-    for (int i = 0; i < state.squad.length; i++) {
-      notifier.toggleDropZone(spawns[i]);
-    }
-    notifier.confirmDeployment();
+    notifier.startMission(0, selectedDropZone: const GridPosition(2, 2));
   }
 
   test('squad turn advances directly to enemy phase', () {

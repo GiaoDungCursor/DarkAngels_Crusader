@@ -7,6 +7,7 @@ class Marine {
   final String role;
   final IconData? icon;
   final String? portrait;
+  final String spriteKey;
 
   final int maxHp;
   int hp;
@@ -29,6 +30,7 @@ class Marine {
     required this.role,
     this.icon,
     this.portrait,
+    this.spriteKey = 'marine',
     required this.maxHp,
     required this.hp,
     required this.weapon,
@@ -63,6 +65,7 @@ class Marine {
       role: role,
       icon: icon,
       portrait: portrait,
+      spriteKey: spriteKey,
       maxHp: maxHp,
       hp: hp ?? this.hp,
       weapon: weapon ?? this.weapon,

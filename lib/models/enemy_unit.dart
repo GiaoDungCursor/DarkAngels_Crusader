@@ -1,6 +1,6 @@
 import 'grid_position.dart';
 
-enum EnemyKind { orkBoy, nob, loota, cultist, genestealer, hereticAstartes }
+enum EnemyKind { orkBoy, nob, loota, cultist, genestealer, hereticAstartes, orkWarboss }
 
 class EnemyUnit {
   const EnemyUnit({
@@ -36,6 +36,8 @@ class EnemyUnit {
     GridPosition? position,
     List<GridPosition>? path,
     double? commandProgress,
+    int? damage,
+    double? speed,
   }) {
     return EnemyUnit(
       id: id,
@@ -47,8 +49,8 @@ class EnemyUnit {
       path: path ?? this.path,
       commandProgress: commandProgress ?? this.commandProgress,
       attackRange: attackRange,
-      damage: damage,
-      speed: speed,
+      damage: damage ?? this.damage,
+      speed: speed ?? this.speed,
       rpReward: rpReward,
     );
   }

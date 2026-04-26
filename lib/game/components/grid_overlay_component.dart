@@ -22,10 +22,8 @@ class GridOverlayComponent extends PositionComponent
   final Paint _meleePaint = Paint()..color = const Color(0x55FF6B5F);
   final Paint _deployPaint = Paint()..color = const Color(0x6633D6A6);
   final Paint _plantBombPaint = Paint()..color = const Color(0x66C04040);
-  final Paint _blockedPaint = Paint()..color = const Color(0x66101218);
-  final Paint _voidPaint = Paint()..color = const Color(0x992A0D16);
-  final Paint _bridgePaint = Paint()..color = const Color(0x3333D6A6);
-  final Paint _hazardPaint = Paint()..color = const Color(0x66E56B2F);
+  final Paint _blockedPaint = Paint()..color = const Color(0x99515C66);
+  final Paint _voidPaint = Paint()..color = const Color(0xB0000000);
 
   @override
   void render(Canvas canvas) {
@@ -43,25 +41,27 @@ class GridOverlayComponent extends PositionComponent
           CrusadeGame.tileSize,
         ).deflate(3);
 
-        if (snapshot.map.isWalkable(tile)) {
-          _drawWalkableBase(canvas, rect);
-        }
-
         if (snapshot.map.voidTiles.contains(tile)) {
           canvas.drawRect(rect, _voidPaint);
-          _drawWarningBorder(canvas, rect);
+          _drawCross(canvas, rect, const Color(0xFF2B3440));
         } else if (snapshot.map.blockedTiles.contains(tile)) {
-          canvas.drawRect(rect, _blockedPaint);
-          _drawWarningBorder(canvas, rect);
-        } else if (snapshot.map.bridgeTiles.contains(tile)) {
-          canvas.drawRect(rect, _bridgePaint);
-        } else if (snapshot.map.hazardTiles.contains(tile)) {
-          canvas.drawRect(rect, _hazardPaint);
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(rect.deflate(4), const Radius.circular(4)),
+            _blockedPaint,
+          );
+          _drawCross(canvas, rect.deflate(10), const Color(0xFFE2E8F0));
         }
 
-        if (snapshot.coverTiles.contains(tile)) {
-          _drawCover(canvas, rect);
+        if (snapshot.coverTiles.contains(tile) ||
+            snapshot.dropPodCoverTiles.contains(tile)) {
+          _drawTileGlyph(
+            canvas,
+            rect,
+            Icons.shield_outlined,
+            const Color(0x88708090),
+          );
         }
+
         if (snapshot.shieldedMarines.contains(tile)) {
           // Draw shield on the marine
           _drawTileGlyph(canvas, rect, Icons.shield, const Color(0xFF3A8DFF));
@@ -80,34 +80,22 @@ class GridOverlayComponent extends PositionComponent
               ..strokeWidth = 2
               ..color = const Color(0xAA33D6A6),
           );
-          _drawTileGlyph(canvas, rect, Icons.cell_tower, const Color(0xFF33D6A6));
+          _drawTileGlyph(
+            canvas,
+            rect,
+            Icons.cell_tower,
+            const Color(0xFF33D6A6),
+          );
         }
-        if (snapshot.activationPhase == ActivationPhase.deployment) {
-          if (snapshot.map.marineSpawns.contains(tile)) {
-            canvas.drawRect(
-              rect,
-              Paint()..color = const Color(0x3333D6A6),
-            );
-            canvas.drawRect(
-              rect.deflate(2),
-              Paint()
-                ..style = PaintingStyle.stroke
-                ..strokeWidth = 2
-                ..color = const Color(0xAA33D6A6),
-            );
-          }
-          if (snapshot.selectedDropZones.contains(tile)) {
-            _drawTileGlyph(canvas, rect, Icons.my_location, const Color(0xFF33D6A6));
-          }
-        }
+        // Deployment rendering removed
         if (snapshot.highlightedTiles.contains(tile)) {
           var paint = _movePaint;
           if (snapshot.actionMode == ActionMode.move) {
             final threat = snapshot.movementThreats[tile];
             paint = switch (threat) {
-              ThreatLevel.safe => Paint()..color = const Color(0x6633D6A6), // Green
-              ThreatLevel.warning => Paint()..color = const Color(0x77FFB15E), // Yellow
-              ThreatLevel.danger => Paint()..color = const Color(0x77FF6B5F), // Red
+              ThreatLevel.safe => Paint()..color = const Color(0x332ECC71),
+              ThreatLevel.warning => Paint()..color = const Color(0x44F1C40F),
+              ThreatLevel.danger => Paint()..color = const Color(0x44E74C3C),
               null => _movePaint,
             };
           } else {
@@ -158,49 +146,12 @@ class GridOverlayComponent extends PositionComponent
     );
   }
 
-  void _drawWarningBorder(Canvas canvas, Rect rect) {
+  void _drawCross(Canvas canvas, Rect rect, Color color) {
     final paint = Paint()
-      ..style = PaintingStyle.stroke
+      ..color = color
       ..strokeWidth = 2
-      ..color = const Color(0xFFE56B2F);
-    canvas.drawRect(rect.deflate(2), paint);
-    
-    // Draw some diagonal stripes on the edges
-    final stripePaint = Paint()
-      ..color = const Color(0x44E56B2F)
-      ..strokeWidth = 2;
-    for (var i = 0; i < rect.width; i += 8) {
-      canvas.drawLine(
-        Offset(rect.left + i, rect.top),
-        Offset(rect.left + i + 4, rect.top + 4),
-        stripePaint,
-      );
-    }
-  }
-
-  void _drawWalkableBase(Canvas canvas, Rect rect) {
-    final paint = Paint()..color = const Color(0xFF1E293B); // Slate-800
-    canvas.drawRect(rect, paint);
-    
-    final gridPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1
-      ..color = const Color(0x11FFFFFF);
-    
-    // Draw an inner border for the metal plate look
-    canvas.drawRect(rect.deflate(2), gridPaint);
-  }
-
-  void _drawCover(Canvas canvas, Rect rect) {
-    final basePaint = Paint()..color = const Color(0xFF334155); // Slate-700
-    final topPaint = Paint()..color = const Color(0xFF475569); // Slate-600
-    
-    // Draw a blocky barricade
-    final block = Rect.fromLTRB(rect.left + 4, rect.top + 8, rect.right - 4, rect.bottom - 8);
-    canvas.drawRect(block, basePaint);
-    
-    // Draw top highlight
-    final highlight = Rect.fromLTRB(block.left, block.top, block.right, block.top + 4);
-    canvas.drawRect(highlight, topPaint);
+      ..style = PaintingStyle.stroke;
+    canvas.drawLine(rect.topLeft, rect.bottomRight, paint);
+    canvas.drawLine(rect.topRight, rect.bottomLeft, paint);
   }
 }

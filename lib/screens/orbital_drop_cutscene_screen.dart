@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/grid_position.dart';
 import '../models/mission.dart';
 import 'command_screen.dart';
 
@@ -8,10 +9,12 @@ class OrbitalDropCutsceneScreen extends StatelessWidget {
     super.key,
     required this.mission,
     required this.missionIndex,
+    required this.selectedDropZone,
   });
 
   final Mission mission;
   final int missionIndex;
+  final GridPosition selectedDropZone;
 
   @override
   Widget build(BuildContext context) {
@@ -94,8 +97,11 @@ class OrbitalDropCutsceneScreen extends StatelessWidget {
   void _enterGame(BuildContext context) {
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (_) =>
-            CommandScreen(mission: mission, missionIndex: missionIndex),
+        builder: (_) => CommandScreen(
+          mission: mission,
+          missionIndex: missionIndex,
+          selectedDropZone: selectedDropZone,
+        ),
       ),
     );
   }

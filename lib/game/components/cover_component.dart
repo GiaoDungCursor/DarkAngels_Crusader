@@ -13,13 +13,13 @@ class CoverComponent extends PositionComponent
 
   final GridPosition gridPosition;
 
-  final Paint _basePaint = Paint()..color = const Color(0xFF2B3137);
+  final Paint _basePaint = Paint()..color = const Color(0xAA3E4C59);
   final Paint _edgePaint = Paint()
     ..style = PaintingStyle.stroke
-    ..strokeWidth = 2
-    ..color = const Color(0xFF77808A);
-  final Paint _shadowPaint = Paint()..color = const Color(0x99000000);
-  final Paint _stripePaint = Paint()..color = const Color(0xFFD8A93A);
+    ..strokeWidth = 1.0
+    ..color = const Color(0x665D6D7E);
+  final Paint _shadowPaint = Paint()..color = const Color(0x44000000);
+  final Paint _stripePaint = Paint()..color = const Color(0x337F8C8D);
 
   @override
   Future<void> onLoad() async {

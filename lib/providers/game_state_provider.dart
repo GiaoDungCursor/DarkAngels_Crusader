@@ -7,444 +7,36 @@ import '../models/equipment.dart';
 import '../models/grid_position.dart';
 import '../models/marine.dart';
 import '../models/tactical_map.dart';
+import '../models/game_enums.dart';
+import '../models/combat_event.dart';
+import '../models/game_state.dart';
 import '../services/pathfinder.dart';
 import 'settings_provider.dart';
 
-enum ActionMode {
-  move,
-  shoot,
-  melee,
-  ability,
-  overwatch,
-  deployReserve,
-  plantBomb,
-  deployBeacon,
-}
+export '../models/game_enums.dart';
+export '../models/combat_event.dart';
+export '../models/game_state.dart';
 
-enum SimulationSpeed { paused, slow, normal }
-
-enum ThreatLevel { safe, warning, danger }
-
-enum ActivationPhase { deployment, marines, enemies }
-
-enum MissionStatus { active, victory, defeat }
-
-class CombatEvent {
-  const CombatEvent(this.message, {this.important = false});
-
-  final String message;
-  final bool important;
-}
-
-class GameState {
-  static const marineMoveRange = 2;
-  static const rangedAttackRange = 3;
-  static const meleeAttackRange = 1;
-  static const maxCommandPoints = 10;
-
-  final int commandPoints;
-  final int requisitionPoints;
-  final int missionIndex;
-  final TacticalMap map;
-  final List<MissionObjective> objectives;
-  final List<Marine> squad;
-  final List<Marine> reserveSquad;
-  final List<EnemyUnit> enemies;
-  final int selectedMarineIndex;
-  final int? selectedReserveIndex;
-  final ActionMode? actionMode;
-  final ActivationPhase activationPhase;
-  final int activeEnemyIndex;
-  final int activationRound;
-  final SimulationSpeed speed;
-  final MissionStatus missionStatus;
-  final Set<GridPosition> selectedDropZones;
-  final double elapsedSeconds;
-  final double cpChargeSeconds;
-  final double aiThinkSeconds;
-  final int wave;
-  final int defeatedEnemies;
-  final bool beaconDestroyed;
-  final Set<GridPosition> activeEnemyBases;
-  final Map<GridPosition, int> plantedBombs;
-  final Set<GridPosition> activeDropBeacons;
-  final int revision;
-  final String statusMessage;
-  final List<CombatEvent> events;
-
-  GameState({
-    required this.commandPoints,
-    required this.requisitionPoints,
-    required this.missionIndex,
-    required this.map,
-    required this.objectives,
-    required this.squad,
-    required this.reserveSquad,
-    required this.enemies,
-    required this.selectedMarineIndex,
-    required this.selectedReserveIndex,
-    required this.actionMode,
-    required this.activationPhase,
-    required this.activeEnemyIndex,
-    required this.activationRound,
-    required this.speed,
-    required this.missionStatus,
-    required this.elapsedSeconds,
-    required this.cpChargeSeconds,
-    required this.aiThinkSeconds,
-    required this.wave,
-    required this.defeatedEnemies,
-    required this.beaconDestroyed,
-    required this.activeEnemyBases,
-    required this.plantedBombs,
-    required this.activeDropBeacons,
-    required this.revision,
-    required this.statusMessage,
-    required this.events,
-    this.selectedDropZones = const {},
-  });
-
-  int get columns => map.width;
-  int get rows => map.height;
-  Set<GridPosition> get coverTiles => map.coverTiles;
-  bool get isPlayerPlanning => missionStatus == MissionStatus.active;
-  bool get isMarinePhase =>
-      missionStatus == MissionStatus.active &&
-      activationPhase == ActivationPhase.marines;
-
-  Marine? get selectedMarine {
-    if (selectedMarineIndex < 0 || selectedMarineIndex >= squad.length) {
-      return null;
-    }
-    return squad[selectedMarineIndex];
-  }
-
-  double get squadIntegrity {
-    final total = squad.fold<int>(0, (sum, marine) => sum + marine.maxHp);
-    final hp = squad.fold<int>(0, (sum, marine) => sum + max(0, marine.hp));
-    return total == 0 ? 0 : hp / total;
-  }
-
-  Set<GridPosition> get blockers {
-    return {
-      ...map.coverTiles,
-      for (final enemy in enemies)
-        if (enemy.hp > 0) enemy.position,
-      for (final marine in squad)
-        if (marine.hp > 0) marine.gridPosition,
-    };
-  }
-
-  Set<GridPosition> get reachableTiles {
-    final marine = selectedMarine;
-    if (marine == null || !isMarinePhase || marine.actionPoints == 0 || marine.hp <= 0) {
-      return {};
-    }
-    final maxSteps = marine.actionPoints >= 2 ? marineMoveRange : 2;
-    return const Pathfinder().reachable(
-      map: map,
-      start: marine.gridPosition,
-      maxSteps: maxSteps,
-      blockers: blockers..remove(marine.gridPosition),
-    );
-  }
-
-  Set<GridPosition> get shootableTiles {
-    final marine = selectedMarine;
-    if (marine == null ||
-        !isMarinePhase ||
-        marine.actionPoints == 0 ||
-        marine.hp <= 0) {
-      return {};
-    }
-    return enemies
-        .where(
-          (enemy) =>
-              enemy.hp > 0 &&
-              marine.gridPosition.distanceTo(enemy.position) <=
-                  rangedAttackRange &&
-              const Pathfinder().hasLineOfSight(
-                map: map,
-                from: marine.gridPosition,
-                to: enemy.position,
-              ),
-        )
-        .map((enemy) => enemy.position)
-        .toSet();
-  }
-
-  Set<GridPosition> get meleeTiles {
-    final marine = selectedMarine;
-    if (marine == null ||
-        !isMarinePhase ||
-        marine.actionPoints == 0 ||
-        marine.hp <= 0) {
-      return {};
-    }
-    return enemies
-        .where(
-          (enemy) =>
-              enemy.hp > 0 &&
-              marine.gridPosition.distanceTo(enemy.position) <=
-                  meleeAttackRange,
-        )
-        .map((enemy) => enemy.position)
-        .toSet();
-  }
-
-  Set<GridPosition> get plantBombTiles {
-    final marine = selectedMarine;
-    if (marine == null ||
-        !isMarinePhase ||
-        marine.actionPoints == 0 ||
-        marine.hp <= 0) {
-      return {};
-    }
-    return activeEnemyBases.where((base) {
-      return base.distanceTo(marine.gridPosition) <= 1 &&
-          !plantedBombs.containsKey(base);
-    }).toSet();
-  }
-
-  Set<GridPosition> get objectiveHighlights {
-    return {...map.objectiveTiles, ...map.extractionTiles};
-  }
-
-  Set<GridPosition> get reserveDropTiles {
-    if (!isMarinePhase ||
-        selectedReserveIndex == null ||
-        selectedReserveIndex! < 0 ||
-        selectedReserveIndex! >= reserveSquad.length ||
-        commandPoints < 2) {
-      return {};
-    }
-    return freeReserveDropTiles;
-  }
-
-  Set<GridPosition> get freeReserveDropTiles {
-    final occupied = {
-      for (final marine in squad)
-        if (marine.hp > 0) marine.gridPosition,
-      for (final enemy in enemies)
-        if (enemy.hp > 0) enemy.position,
-    };
-    final validTiles = {...map.marineSpawns, ...activeDropBeacons};
-    return validTiles
-        .where((tile) => map.isWalkable(tile) && !occupied.contains(tile))
-        .toSet();
-  }
-
-  Set<GridPosition> get highlightedTiles {
-    return switch (actionMode) {
-      ActionMode.move => reachableTiles,
-      ActionMode.shoot => shootableTiles,
-      ActionMode.melee => meleeTiles,
-      ActionMode.ability => shootableTiles.union(reachableTiles),
-      ActionMode.overwatch => shootableTiles,
-      ActionMode.deployReserve => reserveDropTiles,
-      ActionMode.plantBomb => plantBombTiles,
-      ActionMode.deployBeacon => deployBeaconTiles,
-      null => {},
-    };
-  }
-
-  Set<GridPosition> get deployBeaconTiles {
-    final marine = selectedMarine;
-    if (marine == null || !isMarinePhase || marine.actionPoints == 0 || marine.hp <= 0) {
-      return {};
-    }
-    final role = marine.role.toLowerCase();
-    if (!role.contains('commander') && !role.contains('techmarine')) {
-      return {};
-    }
-    // Can deploy beacon within 2 tiles
-    return const Pathfinder().reachable(
-      map: map,
-      start: marine.gridPosition,
-      maxSteps: 2,
-      blockers: blockers,
-    ).toSet();
-  }
-
-  Marine? getTargetFor(EnemyUnit enemy) {
-    var bestMarine = -1;
-    var bestDistance = 999.0;
-    for (var i = 0; i < squad.length; i++) {
-      if (squad[i].hp <= 0) continue;
-      final distance = enemy.position.distanceTo(squad[i].gridPosition);
-      if (distance < bestDistance) {
-        bestDistance = distance.toDouble();
-        bestMarine = i;
-      }
-    }
-    return bestMarine != -1 ? squad[bestMarine] : null;
-  }
-
-  Map<GridPosition, ThreatLevel> get movementThreats {
-    final threats = <GridPosition, ThreatLevel>{};
-    if (actionMode != ActionMode.move) return threats;
-
-    final pathfinder = const Pathfinder();
-    for (final tile in reachableTiles) {
-      var level = ThreatLevel.safe;
-      for (final enemy in enemies) {
-        if (enemy.hp <= 0) continue;
-        
-        final dist = tile.distanceTo(enemy.position);
-        
-        // Melee danger
-        if (dist <= 1.5) {
-          level = ThreatLevel.danger;
-          break; // Max threat reached
-        }
-        
-        // Ranged danger
-        if (dist <= enemy.attackRange && pathfinder.hasLineOfSight(map: map, from: enemy.position, to: tile)) {
-          if (hasDirectionalCover(target: tile, attacker: enemy.position, map: map)) {
-            if (level == ThreatLevel.safe) {
-              level = ThreatLevel.warning;
-            }
-          } else {
-            level = ThreatLevel.danger;
-            break; // Max threat reached
-          }
-        }
-      }
-      threats[tile] = level;
-    }
-    return threats;
-  }
-
-  static bool hasDirectionalCover({
-    required GridPosition target,
-    required GridPosition attacker,
-    required TacticalMap map,
-  }) {
-    for (final cover in map.coverTiles) {
-      if (cover.distanceTo(target) <= 1.5) {
-        if (cover.distanceTo(attacker) < target.distanceTo(attacker)) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
-  Set<GridPosition> get shieldedMarines {
-    final shielded = <GridPosition>{};
-    final pathfinder = const Pathfinder();
-    for (final marine in squad) {
-      if (marine.hp <= 0) continue;
-      for (final enemy in enemies) {
-        if (enemy.hp <= 0) continue;
-        if (marine.gridPosition.distanceTo(enemy.position) <= enemy.attackRange &&
-            pathfinder.hasLineOfSight(map: map, from: enemy.position, to: marine.gridPosition)) {
-          if (hasDirectionalCover(target: marine.gridPosition, attacker: enemy.position, map: map)) {
-            shielded.add(marine.gridPosition);
-            break;
-          }
-        }
-      }
-    }
-    return shielded;
-  }
-
-  bool isInside(GridPosition tile) => map.isInside(tile);
-
-  int marineAt(GridPosition tile) {
-    return squad.indexWhere(
-      (marine) => marine.hp > 0 && marine.gridPosition == tile,
-    );
-  }
-
-  int enemyAt(GridPosition tile) {
-    return enemies.indexWhere(
-      (enemy) => enemy.hp > 0 && enemy.position == tile,
-    );
-  }
-
-  GameState copyWith({
-    int? commandPoints,
-    int? requisitionPoints,
-    int? missionIndex,
-    TacticalMap? map,
-    List<MissionObjective>? objectives,
-    List<Marine>? squad,
-    List<Marine>? reserveSquad,
-    List<EnemyUnit>? enemies,
-    int? selectedMarineIndex,
-    int? selectedReserveIndex,
-    bool clearSelectedReserve = false,
-    ActionMode? actionMode,
-    bool clearActionMode = false,
-    ActivationPhase? activationPhase,
-    int? activeEnemyIndex,
-    int? activationRound,
-    SimulationSpeed? speed,
-    MissionStatus? missionStatus,
-    double? elapsedSeconds,
-    double? cpChargeSeconds,
-    double? aiThinkSeconds,
-    int? wave,
-    int? defeatedEnemies,
-    bool? beaconDestroyed,
-    Set<GridPosition>? activeEnemyBases,
-    Map<GridPosition, int>? plantedBombs,
-    Set<GridPosition>? activeDropBeacons,
-    int? revision,
-    String? statusMessage,
-    List<CombatEvent>? events,
-    Set<GridPosition>? selectedDropZones,
-  }) {
-    return GameState(
-      commandPoints: commandPoints ?? this.commandPoints,
-      requisitionPoints: requisitionPoints ?? this.requisitionPoints,
-      missionIndex: missionIndex ?? this.missionIndex,
-      map: map ?? this.map,
-      objectives: objectives ?? this.objectives,
-      squad: squad ?? this.squad,
-      reserveSquad: reserveSquad ?? this.reserveSquad,
-      enemies: enemies ?? this.enemies,
-      selectedMarineIndex: selectedMarineIndex ?? this.selectedMarineIndex,
-      selectedReserveIndex: clearSelectedReserve
-          ? null
-          : selectedReserveIndex ?? this.selectedReserveIndex,
-      actionMode: clearActionMode ? null : actionMode ?? this.actionMode,
-      activationPhase: activationPhase ?? this.activationPhase,
-      activeEnemyIndex: activeEnemyIndex ?? this.activeEnemyIndex,
-      activationRound: activationRound ?? this.activationRound,
-      speed: speed ?? this.speed,
-      missionStatus: missionStatus ?? this.missionStatus,
-      elapsedSeconds: elapsedSeconds ?? this.elapsedSeconds,
-      cpChargeSeconds: cpChargeSeconds ?? this.cpChargeSeconds,
-      aiThinkSeconds: aiThinkSeconds ?? this.aiThinkSeconds,
-      wave: wave ?? this.wave,
-      defeatedEnemies: defeatedEnemies ?? this.defeatedEnemies,
-      beaconDestroyed: beaconDestroyed ?? this.beaconDestroyed,
-      activeEnemyBases: activeEnemyBases ?? this.activeEnemyBases,
-      plantedBombs: plantedBombs ?? this.plantedBombs,
-      activeDropBeacons: activeDropBeacons ?? this.activeDropBeacons,
-      revision: revision ?? this.revision + 1,
-      statusMessage: statusMessage ?? this.statusMessage,
-      events: events ?? this.events,
-      selectedDropZones: selectedDropZones ?? this.selectedDropZones,
-    );
-  }
-}
+part 'game_logic/enemy_ai.dart';
+part 'game_logic/combat_logic.dart';
+part 'game_logic/mission_logic.dart';
+part 'game_logic/mission_setup.dart';
+part 'game_logic/player_actions.dart';
 
 class GameStateNotifier extends Notifier<GameState> {
   static const _pathfinder = Pathfinder();
 
   @override
   GameState build() {
-    return _newMissionState(0, requisitionPoints: 0);
+    return newMissionState(0, requisitionPoints: 0);
   }
 
-  void startMission(int index) {
+  void startMission(int index, {GridPosition? selectedDropZone}) {
     final safeIndex = index.clamp(0, campaignMaps.length - 1);
-    state = _newMissionState(
+    state = newMissionState(
       safeIndex,
       requisitionPoints: state.requisitionPoints,
+      selectedDropZone: selectedDropZone,
       event: 'Mission loaded: ${campaignMaps[safeIndex].name}.',
     );
   }
@@ -455,15 +47,15 @@ class GameStateNotifier extends Notifier<GameState> {
     if (index < 0 || index >= state.squad.length) return;
     if (state.squad[index].hp <= 0) return;
     if (state.missionStatus != MissionStatus.active) {
-      state = _emit(state, 'Mission already resolved.');
+      state = emit(state, 'Mission already resolved.');
       return;
     }
     if (state.activationPhase != ActivationPhase.marines) {
-      state = _emit(state, 'Enemy activation in progress.');
+      state = emit(state, 'Enemy activation in progress.');
       return;
     }
 
-    state = _emit(
+    state = emit(
       state.copyWith(
         selectedMarineIndex: index,
         actionMode: ActionMode.move,
@@ -475,15 +67,15 @@ class GameStateNotifier extends Notifier<GameState> {
 
   void setActionMode(ActionMode mode) {
     if (state.missionStatus != MissionStatus.active) {
-      state = _emit(state, 'Mission already resolved.');
+      state = emit(state, 'Mission already resolved.');
       return;
     }
-    state = _emit(
+    state = emit(
       state.copyWith(
         actionMode: mode,
         clearSelectedReserve: mode != ActionMode.deployReserve,
       ),
-      'Mode: ${_modeName(mode)}.',
+      'Mode: ${modeName(mode)}.',
     );
   }
 
@@ -491,7 +83,7 @@ class GameStateNotifier extends Notifier<GameState> {
     final next = state.speed == SimulationSpeed.paused
         ? SimulationSpeed.normal
         : SimulationSpeed.paused;
-    state = _emit(
+    state = emit(
       state.copyWith(speed: next),
       next == SimulationSpeed.paused
           ? 'Tactical pause engaged.'
@@ -500,7 +92,7 @@ class GameStateNotifier extends Notifier<GameState> {
   }
 
   void setSpeed(SimulationSpeed speed) {
-    state = _emit(
+    state = emit(
       state.copyWith(speed: speed),
       speed == SimulationSpeed.slow
           ? 'Slow tactical execution.'
@@ -512,19 +104,14 @@ class GameStateNotifier extends Notifier<GameState> {
 
   void handleTileTap(GridPosition tile) {
     if (state.missionStatus != MissionStatus.active) {
-      state = _emit(state, 'Mission already resolved.');
+      state = emit(state, 'Mission already resolved.');
       return;
     }
     
-    if (state.activationPhase == ActivationPhase.deployment) {
-      if (state.map.marineSpawns.contains(tile)) {
-        toggleDropZone(tile);
-      }
-      return;
-    }
+    // Deployment phase check removed
 
     if (state.activationPhase != ActivationPhase.marines) {
-      state = _emit(state, 'Wait for the enemy phase to resolve.');
+      state = emit(state, 'Wait for the enemy phase to resolve.');
       return;
     }
     switch (state.actionMode) {
@@ -541,7 +128,7 @@ class GameStateNotifier extends Notifier<GameState> {
       case ActionMode.deployReserve:
         final reserveIndex = state.selectedReserveIndex;
         if (reserveIndex == null) {
-          state = _emit(state, 'Select a reserve marine first.');
+          state = emit(state, 'Select a reserve marine first.');
         } else {
           deployReserveMarineAt(reserveIndex, tile);
         }
@@ -550,175 +137,12 @@ class GameStateNotifier extends Notifier<GameState> {
       case ActionMode.deployBeacon:
         deployBeacon(tile);
       case null:
-        state = _emit(state, 'Choose a command mode first.');
+        state = emit(state, 'Choose a command mode first.');
     }
   }
 
-  bool issueMove(GridPosition target) {
-    final marine = state.selectedMarine;
-    if (marine == null ||
-        marine.actionPoints == 0 ||
-        state.missionStatus != MissionStatus.active ||
-        state.activationPhase != ActivationPhase.marines) {
-      state = _emit(state, 'This battle-brother cannot move now.');
-      return false;
-    }
-    final blockers = {...state.blockers}..remove(marine.gridPosition);
-    final path = _pathfinder.findPath(
-      map: state.map,
-      start: marine.gridPosition,
-      goal: target,
-      blockers: blockers,
-    );
-    final distance = path.length - 1;
-    final maxAllowed = marine.actionPoints >= 2 ? GameState.marineMoveRange : 2;
-    if (distance <= 0 || distance > maxAllowed) {
-      state = _emit(
-        state,
-        'Move rejected: target out of reach.',
-      );
-      return false;
-    }
 
-    final apCost = distance > 2 ? 2 : 1;
-    final squad = List<Marine>.from(state.squad);
-    squad[state.selectedMarineIndex] = marine.copyWith(
-      gridPosition: target,
-      commandPath: const [],
-      commandProgress: 0,
-      actionPoints: max(0, marine.actionPoints - apCost),
-      isOverwatching: false,
-    );
-    state = _emit(
-      state.copyWith(squad: squad, actionMode: ActionMode.move),
-      '${marine.name} moving to grid $target.',
-    );
-    return true;
-  }
 
-  bool issueAttack(GridPosition target, {required bool melee}) {
-    final marine = state.selectedMarine;
-    if (marine == null ||
-        marine.actionPoints == 0 ||
-        state.missionStatus != MissionStatus.active ||
-        state.activationPhase != ActivationPhase.marines) {
-      state = _emit(state, 'This battle-brother cannot attack now.');
-      return false;
-    }
-    final enemyIndex = state.enemyAt(target);
-    if (enemyIndex == -1) {
-      state = _emit(state, 'No hostile target at grid $target.');
-      return false;
-    }
-    final range = melee
-        ? GameState.meleeAttackRange
-        : GameState.rangedAttackRange;
-    if (marine.gridPosition.distanceTo(target) > range) {
-      state = _emit(
-        state,
-        'Target outside ${melee ? 'melee' : 'ranged'} range.',
-      );
-      return false;
-    }
-    if (!melee &&
-        !_pathfinder.hasLineOfSight(
-          map: state.map,
-          from: marine.gridPosition,
-          to: target,
-        )) {
-      state = _emit(state, 'Line of sight blocked by cover.');
-      return false;
-    }
-
-    _damageEnemy(
-      enemyIndex,
-      melee ? 24 : marine.weapon.damage,
-      '${marine.name} ${melee ? 'charges' : 'fires on'} ${state.enemies[enemyIndex].name}.',
-      attackerPosition: marine.gridPosition,
-      apCost: 1,
-    );
-    return true;
-  }
-
-  bool activateAbility(GridPosition target) {
-    final marine = state.selectedMarine;
-    if (marine == null || state.commandPoints <= 0) {
-      state = _emit(state, 'No command points available.');
-      return false;
-    }
-
-    final role = marine.role.toLowerCase();
-    if (role.contains('apothecary')) {
-      final squad = List<Marine>.from(state.squad);
-      final woundedIndex = squad.indexWhere(
-        (unit) => unit.hp > 0 && unit.hp < unit.maxHp,
-      );
-      if (woundedIndex == -1) {
-        state = _emit(state, 'No wounded battle-brother requires aid.');
-        return false;
-      }
-      final wounded = squad[woundedIndex];
-      squad[woundedIndex] = wounded.copyWith(
-        hp: min(wounded.maxHp, wounded.hp + 28),
-      );
-      squad[state.selectedMarineIndex] = marine.copyWith(
-        actionPoints: max(0, marine.actionPoints - 1),
-      );
-      state = _emit(
-        state.copyWith(commandPoints: state.commandPoints - 1, squad: squad),
-        '${marine.name} restores ${wounded.name}.',
-      );
-      return true;
-    }
-
-    if (role.contains('flamer')) {
-      var hit = false;
-      for (var i = 0; i < state.enemies.length; i++) {
-        if (state.enemies[i].position.distanceTo(target) <= 1) {
-          _damageEnemy(
-            i,
-            20,
-            '${marine.name} sweeps the corridor with holy flame.',
-            attackerPosition: marine.gridPosition,
-          );
-          hit = true;
-        }
-      }
-      if (hit) {
-        final squad = List<Marine>.from(state.squad);
-        squad[state.selectedMarineIndex] = marine.copyWith(
-          actionPoints: max(0, marine.actionPoints - 1),
-        );
-        state = state.copyWith(commandPoints: max(0, state.commandPoints - 1), squad: squad);
-        return true;
-      }
-    }
-
-    final enemyIndex = state.enemyAt(target);
-    if (enemyIndex == -1) {
-      state = _emit(state, 'Select an enemy tile for this ability.');
-      return false;
-    }
-    final cost = role.contains('commander') ? 2 : 1;
-    if (state.commandPoints < cost) {
-      state = _emit(state, 'Insufficient command points.');
-      return false;
-    }
-    final damage = role.contains('plasma')
-        ? 36
-        : role.contains('commander')
-        ? 42
-        : 24;
-    _damageEnemy(
-      enemyIndex,
-      damage,
-      '${marine.name} executes a class ability.',
-      attackerPosition: marine.gridPosition,
-      apCost: 1,
-    );
-    state = state.copyWith(commandPoints: state.commandPoints - cost);
-    return true;
-  }
 
   void setOverwatch() {
     final marine = state.selectedMarine;
@@ -728,55 +152,20 @@ class GameStateNotifier extends Notifier<GameState> {
       actionPoints: max(0, marine.actionPoints - 1),
       isOverwatching: true,
     );
-    state = _emit(
+    state = emit(
       state.copyWith(squad: squad),
       '${marine.name} enters Overwatch.',
     );
   }
 
-  bool plantBomb(GridPosition target) {
-    final marine = state.selectedMarine;
-    if (marine == null || marine.actionPoints == 0) return false;
-    if (!state.activeEnemyBases.contains(target) ||
-        state.plantedBombs.containsKey(target)) {
-      state = _emit(state, 'Cannot plant bomb here.');
-      return false;
-    }
-
-    // Cost 1 CP to plant bomb
-    if (state.commandPoints < 1) {
-      state = _emit(state, 'Need 1 CP to plant bomb.');
-      return false;
-    }
-
-    final newBombs = Map<GridPosition, int>.from(state.plantedBombs);
-    newBombs[target] = 3; // Explodes in 3 rounds
-
-    final squad = List<Marine>.from(state.squad);
-    squad[state.selectedMarineIndex] = marine.copyWith(
-      actionPoints: max(0, marine.actionPoints - 1),
-      isOverwatching: false,
-    );
-
-    state = _emit(
-      state.copyWith(
-        plantedBombs: newBombs,
-        squad: squad,
-        commandPoints: state.commandPoints - 1,
-      ),
-      '${marine.name} planted a bomb. Detonation in 3 rounds.',
-      important: true,
-    );
-    return true;
-  }
 
   void tickSimulation(double rawDt) {
     if (state.missionStatus != MissionStatus.active) return;
-    state = _checkMissionEnd(_refreshObjectives(state));
+    state = checkMissionEnd(refreshObjectives(state));
   }
 
   void completeMission() {
-    state = _checkMissionEnd(
+    state = checkMissionEnd(
       state.copyWith(missionStatus: MissionStatus.victory),
     );
   }
@@ -788,7 +177,7 @@ class GameStateNotifier extends Notifier<GameState> {
     final squad = List<Marine>.from(state.squad);
 
     // Process bomb timers before enemy activation
-    var nextState = _processBombs(
+    var nextState = processBombs(
       state.copyWith(
         squad: squad,
         activationPhase: ActivationPhase.enemies,
@@ -798,10 +187,10 @@ class GameStateNotifier extends Notifier<GameState> {
       ),
     );
 
-    var afterEnemies = _runEnemyActivationRound(nextState);
-    afterEnemies = _maybeSpawnWave(afterEnemies);
-    afterEnemies = _refreshObjectives(afterEnemies);
-    afterEnemies = _checkMissionEnd(afterEnemies);
+    var afterEnemies = runEnemyActivationRound(nextState);
+    afterEnemies = maybeSpawnWave(afterEnemies);
+    afterEnemies = refreshObjectives(afterEnemies);
+    afterEnemies = checkMissionEnd(afterEnemies);
     if (afterEnemies.missionStatus != MissionStatus.active) {
       state = afterEnemies.copyWith(
         activationPhase: ActivationPhase.marines,
@@ -817,7 +206,7 @@ class GameStateNotifier extends Notifier<GameState> {
           isOverwatching: false,
         ),
     ];
-    state = _emit(
+    state = emit(
       afterEnemies.copyWith(
         squad: resetSquad,
         activationPhase: ActivationPhase.marines,
@@ -832,84 +221,6 @@ class GameStateNotifier extends Notifier<GameState> {
     );
   }
 
-  GameState _processBombs(GameState current) {
-    var next = current;
-    final newBombs = Map<GridPosition, int>.from(current.plantedBombs);
-    final activeBases = Set<GridPosition>.from(current.activeEnemyBases);
-    final toRemove = <GridPosition>[];
-
-    for (final entry in newBombs.entries) {
-      final pos = entry.key;
-      final turnsLeft = entry.value - 1;
-
-      if (turnsLeft <= 0) {
-        // Explode
-        toRemove.add(pos);
-        activeBases.remove(pos);
-
-        // Damage anything adjacent
-        final affectedTiles = [pos, ...pos.neighbors()];
-
-        // Destroy cover
-        final newCover = Set<GridPosition>.from(next.map.coverTiles);
-        newCover.removeAll(affectedTiles);
-        next = next.copyWith(map: next.map.copyWith(coverTiles: newCover));
-
-        // Damage marines
-        final squad = List<Marine>.from(next.squad);
-        for (var i = 0; i < squad.length; i++) {
-          if (squad[i].hp > 0 &&
-              affectedTiles.contains(squad[i].gridPosition)) {
-            next = _damageMarine(
-              next,
-              i,
-              45,
-              'Explosion caught ${squad[i].name}!',
-              attackerPosition: pos,
-            );
-          }
-        }
-
-        // Damage enemies
-        final enemies = List<EnemyUnit>.from(next.enemies);
-        var enemyDefeatedCount = 0;
-        var newRp = next.requisitionPoints;
-        var newCp = next.commandPoints;
-        for (var i = 0; i < enemies.length; i++) {
-          if (enemies[i].hp > 0 &&
-              affectedTiles.contains(enemies[i].position)) {
-            final nextHp = enemies[i].hp - 45;
-            enemies[i] = enemies[i].copyWith(hp: nextHp);
-            if (nextHp <= 0) {
-              enemyDefeatedCount++;
-              newRp += enemies[i].rpReward;
-              newCp = min(GameState.maxCommandPoints, newCp + 1);
-            }
-          }
-        }
-
-        next = _emit(
-          next.copyWith(
-            squad: squad,
-            enemies: enemies.where((e) => e.hp > 0).toList(),
-            defeatedEnemies: next.defeatedEnemies + enemyDefeatedCount,
-            requisitionPoints: newRp,
-            commandPoints: newCp,
-          ),
-          'Bomb detonated at $pos! Base destroyed.',
-          important: true,
-        );
-      } else {
-        newBombs[pos] = turnsLeft;
-      }
-    }
-
-    for (final pos in toRemove) {
-      newBombs.remove(pos);
-    }
-
-    return next.copyWith(plantedBombs: newBombs, activeEnemyBases: activeBases);
-  }
 
   void addRP(int amount) {
     state = state.copyWith(requisitionPoints: state.requisitionPoints + amount);
@@ -933,7 +244,7 @@ class GameStateNotifier extends Notifier<GameState> {
     }
     final dropTiles = state.freeReserveDropTiles;
     if (dropTiles.isEmpty) {
-      state = _emit(state, 'No valid drop zone available.');
+      state = emit(state, 'No valid drop zone available.');
       return false;
     }
     return deployReserveMarineAt(reserveIndex, dropTiles.first);
@@ -945,19 +256,19 @@ class GameStateNotifier extends Notifier<GameState> {
     }
     const cost = 2;
     if (state.missionStatus != MissionStatus.active) {
-      state = _emit(state, 'Mission already resolved.');
+      state = emit(state, 'Mission already resolved.');
       return;
     }
     if (state.commandPoints < cost) {
-      state = _emit(state, 'Need $cost CP to deploy reinforcement.');
+      state = emit(state, 'Need $cost CP to deploy reinforcement.');
       return;
     }
     if (state.freeReserveDropTiles.isEmpty) {
-      state = _emit(state, 'No valid drop zone available.');
+      state = emit(state, 'No valid drop zone available.');
       return;
     }
 
-    state = _emit(
+    state = emit(
       state.copyWith(
         selectedReserveIndex: reserveIndex,
         actionMode: ActionMode.deployReserve,
@@ -967,91 +278,7 @@ class GameStateNotifier extends Notifier<GameState> {
     );
   }
 
-  void deployBeacon(GridPosition tile) {
-    if (!state.deployBeaconTiles.contains(tile)) return;
-    final marine = state.selectedMarine!;
-    
-    final newBeacons = Set<GridPosition>.from(state.activeDropBeacons)..add(tile);
-    final squad = List<Marine>.from(state.squad);
-    squad[state.selectedMarineIndex] = marine.copyWith(
-      actionPoints: max(0, marine.actionPoints - 1),
-    );
-    
-    state = _emit(
-      state.copyWith(
-        activeDropBeacons: newBeacons,
-        squad: squad,
-        actionMode: ActionMode.move,
-      ),
-      'Drop Beacon deployed at $tile.',
-    );
-  }
 
-  bool deployReserveMarineAt(int reserveIndex, GridPosition tile) {
-    if (reserveIndex < 0 || reserveIndex >= state.reserveSquad.length) {
-      return false;
-    }
-    const cost = 2;
-    if (state.missionStatus != MissionStatus.active) {
-      state = _emit(state, 'Mission already resolved.');
-      return false;
-    }
-    if (state.commandPoints < cost) {
-      state = _emit(state, 'Need $cost CP to deploy reinforcement.');
-      return false;
-    }
-    if (!state.freeReserveDropTiles.contains(tile)) {
-      state = _emit(state, 'Drop rejected: choose a highlighted drop tile.');
-      return false;
-    }
-
-    final reserve = List<Marine>.from(state.reserveSquad);
-    final reinforcement = reserve.removeAt(reserveIndex);
-    final deployed = reinforcement.copyWith(
-      gridPosition: tile,
-      actionPoints: 0,
-      isOverwatching: false,
-    );
-
-    var nextState = state.copyWith(
-      squad: [...state.squad, deployed],
-      reserveSquad: reserve,
-      commandPoints: state.commandPoints - cost,
-      actionMode: ActionMode.move,
-      clearSelectedReserve: true,
-    );
-
-    // Drop Pod Impact Damage
-    final affectedTiles = tile.neighbors();
-    final enemies = List<EnemyUnit>.from(nextState.enemies);
-    var enemyDefeatedCount = 0;
-    var newRp = nextState.requisitionPoints;
-    var newCp = nextState.commandPoints;
-
-    for (var i = 0; i < enemies.length; i++) {
-      if (enemies[i].hp > 0 && affectedTiles.contains(enemies[i].position)) {
-        final nextHp = enemies[i].hp - 20; // 20 impact damage
-        enemies[i] = enemies[i].copyWith(hp: nextHp);
-        if (nextHp <= 0) {
-          enemyDefeatedCount++;
-          newRp += enemies[i].rpReward;
-          newCp = min(GameState.maxCommandPoints, newCp + 1);
-        }
-      }
-    }
-
-    state = _emit(
-      nextState.copyWith(
-        enemies: enemies.where((e) => e.hp > 0).toList(),
-        defeatedEnemies: nextState.defeatedEnemies + enemyDefeatedCount,
-        requisitionPoints: newRp,
-        commandPoints: newCp,
-      ),
-      '${reinforcement.name} deployed to grid $tile. Drop pod impacts nearby enemies!',
-      important: true,
-    );
-    return true;
-  }
 
   bool useRP(int amount) {
     if (state.requisitionPoints >= amount) {
@@ -1079,25 +306,28 @@ class GameStateNotifier extends Notifier<GameState> {
 
   void tick() => tickSimulation(1 / 60);
 
-  GameState _newMissionState(
+  GameState newMissionState(
     int index, {
     required int requisitionPoints,
+    GridPosition? selectedDropZone,
     String? event,
   }) {
-    final map = campaignMaps[index];
+    var activeMap = campaignMaps[index];
+    final squad = _initSquad(activeMap, selectedDropZone);
+    final dropBeacon = selectedDropZone ?? (squad.isNotEmpty ? squad.first.gridPosition : null);
     return GameState(
       commandPoints: 5,
       requisitionPoints: requisitionPoints,
       missionIndex: index,
-      map: map,
-      objectives: map.objectives,
-      squad: _initSquad(map),
-      reserveSquad: _initReserveSquad(map),
+      map: activeMap,
+      objectives: activeMap.objectives,
+      squad: squad,
+      reserveSquad: _initReserveSquad(activeMap, selectedDropZone),
       enemies: _initEnemies(index),
       selectedMarineIndex: 0,
       selectedReserveIndex: null,
       actionMode: null,
-      activationPhase: ActivationPhase.deployment,
+      activationPhase: ActivationPhase.marines,
       activeEnemyIndex: 0,
       activationRound: 1,
       speed: SimulationSpeed.paused,
@@ -1108,28 +338,29 @@ class GameStateNotifier extends Notifier<GameState> {
       wave: 0,
       defeatedEnemies: 0,
       beaconDestroyed: false,
-      activeEnemyBases: Set<GridPosition>.from(map.enemyBaseTiles),
+      activeEnemyBases: Set<GridPosition>.from(activeMap.enemyBaseTiles),
       plantedBombs: const {},
-      activeDropBeacons: Set<GridPosition>.from(map.marineSpawns),
+      activeDropBeacons: dropBeacon != null ? {dropBeacon} : const {},
+      dropPodCoverTiles: dropBeacon != null ? {dropBeacon} : const {},
       revision: 0,
       statusMessage:
-          'Drop pod opened. Cpt. Varro is active. Four marines deployed.',
+          'Drop pod landed. Cpt. Varro is active. Four marines deployed.',
       events: [
-        CombatEvent(event ?? 'Mission loaded: ${map.name}.', important: true),
+        CombatEvent(event ?? 'Mission loaded: ${activeMap.name}.', important: true),
       ],
-      selectedDropZones: const {},
+      selectedDropZones: dropBeacon != null ? {dropBeacon} : const {},
     );
   }
 
-  static List<Marine> _initSquad(TacticalMap map) {
-    return _allMarines(map).take(4).toList();
+  static List<Marine> _initSquad(TacticalMap map, GridPosition? selectedDropZone) {
+    return _allMarines(map, selectedDropZone).take(4).toList();
   }
 
-  static List<Marine> _initReserveSquad(TacticalMap map) {
-    return _allMarines(map).skip(4).toList();
+  static List<Marine> _initReserveSquad(TacticalMap map, GridPosition? selectedDropZone) {
+    return _allMarines(map, selectedDropZone).skip(4).toList();
   }
 
-  static List<Marine> _allMarines(TacticalMap map) {
+  static List<Marine> _allMarines(TacticalMap map, GridPosition? selectedDropZone) {
     const defaultWeapon = Weapon(
       name: 'Godwyn-pattern Boltgun',
       type: WeaponType.boltgun,
@@ -1144,23 +375,97 @@ class GameStateNotifier extends Notifier<GameState> {
       speedModifier: 1.0,
     );
 
+    // (name, role, portrait, hp, spriteKey)
     final data = [
-      (
-        'Cpt. Varro',
-        'Commander - Deathwing',
-        'assets/portraits/cpt_varro.png',
-        110,
-      ),
-      ('Iolan', 'Plasma Gunner', 'assets/portraits/iolan.png', 90),
-      ('Marek', 'Apothecary', 'assets/portraits/marek.png', 90),
-      ('Soren', 'Heavy Bolter', 'assets/portraits/soren.png', 95),
-      ('Rusk', 'Assault - Ravenwing', 'assets/portraits/rusk.png', 88),
-      ('Galen', 'Marksman', 'assets/portraits/galen.png', 84),
-      ('Titus', 'Bladeguard Veteran', 'assets/portraits/titus.png', 115),
-      ('Nero', 'Techmarine', 'assets/portraits/nero.png', 92),
-      ('Cassian', 'Veteran', 'assets/portraits/cassian.png', 96),
-      ('Sevran', 'Flamer', 'assets/portraits/sevran.png', 90),
+      ('Cpt. Varro', 'Commander - Deathwing', 'assets/portraits/cpt_varro.png', 110, 'terminator'),
+      ('Iolan', 'Plasma Gunner', 'assets/portraits/iolan.png', 90, 'marine'),
+      ('Marek', 'Apothecary', 'assets/portraits/marek.png', 90, 'marine'),
+      ('Soren', 'Heavy Bolter', 'assets/portraits/soren.png', 95, 'marine'),
+      ('Rusk', 'Assault - Ravenwing', 'assets/portraits/rusk.png', 88, 'marine'),
+      ('Galen', 'Marksman', 'assets/portraits/galen.png', 84, 'marine'),
+      ('Titus', 'Bladeguard Veteran', 'assets/portraits/titus.png', 115, 'terminator'),
+      ('Nero', 'Techmarine', 'assets/portraits/nero.png', 92, 'marine'),
+      ('Cassian', 'Veteran', 'assets/portraits/cassian.png', 96, 'marine'),
+      ('Sevran', 'Flamer', 'assets/portraits/sevran.png', 90, 'marine'),
     ];
+
+    // If selectedDropZone is provided, spawn around it via BFS.
+    // Otherwise fallback to marineSpawns from map layout, or (1,1).
+    final spawnPoints = <GridPosition>[];
+    if (selectedDropZone != null) {
+      // Tiles that are not safe to spawn a marine on
+      final forbidden = <GridPosition>{
+        selectedDropZone, // the pod itself
+        ...selectedDropZone.neighbors(), // keep landing area clear for reinforcements
+        ...map.enemyBaseTiles,
+        ...map.enemySpawns,
+        ...map.hazardTiles,
+        ...map.objectiveTiles,
+      };
+
+      final queue = [selectedDropZone];
+      final visited = {selectedDropZone};
+      var iterations = 0;
+
+      while (queue.isNotEmpty && spawnPoints.length < 10 && iterations < 200) {
+        iterations++;
+        final current = queue.removeAt(0);
+
+        if (!forbidden.contains(current) &&
+            map.isInside(current) &&
+            map.isWalkable(current)) {
+          spawnPoints.add(current);
+        }
+
+        for (final neighbor in current.neighbors()) {
+          if (!visited.contains(neighbor) && map.isInside(neighbor)) {
+            visited.add(neighbor);
+            queue.add(neighbor);
+          }
+        }
+      }
+    } else if (map.marineSpawns.isNotEmpty) {
+      spawnPoints.addAll(map.marineSpawns);
+    } else {
+      spawnPoints.add(const GridPosition(1, 1));
+    }
+
+    // Safety: if BFS found no tiles (map too blocked), scan full map as fallback
+    if (spawnPoints.isEmpty) {
+      // Define a generic forbidden set if not already in the BFS branch
+      final forbidden = <GridPosition>{
+        ...map.enemyBaseTiles,
+        ...map.enemySpawns,
+        ...map.hazardTiles,
+        ...map.objectiveTiles,
+      };
+
+      outer:
+      for (var y = 0; y < map.height; y++) {
+        for (var x = 0; x < map.width; x++) {
+          final tile = GridPosition(x, y);
+          if (map.isInside(tile) && map.isWalkable(tile) && !forbidden.contains(tile)) {
+            spawnPoints.add(tile);
+            if (spawnPoints.length >= 10) break outer;
+          }
+        }
+      }
+    }
+    // Final fallback – guarantee at least one point to avoid modulo-zero crash
+    if (spawnPoints.isEmpty) {
+       // Search for ANY walkable tile if everything else is forbidden
+       for (var y = 0; y < map.height; y++) {
+         for (var x = 0; x < map.width; x++) {
+           final tile = GridPosition(x, y);
+           if (map.isWalkable(tile)) {
+             spawnPoints.add(tile);
+             break;
+           }
+         }
+         if (spawnPoints.isNotEmpty) break;
+       }
+       if (spawnPoints.isEmpty) spawnPoints.add(const GridPosition(1, 1));
+    }
 
     return [
       for (var i = 0; i < data.length; i++)
@@ -1170,9 +475,10 @@ class GameStateNotifier extends Notifier<GameState> {
           portrait: data[i].$3,
           maxHp: data[i].$4,
           hp: data[i].$4,
+          spriteKey: data[i].$5,
           weapon: defaultWeapon,
           armor: defaultArmor,
-          gridPosition: map.marineSpawns[i % map.marineSpawns.length],
+          gridPosition: spawnPoints[i % spawnPoints.length],
         ),
     ];
   }
@@ -1199,18 +505,31 @@ class GameStateNotifier extends Notifier<GameState> {
             EnemyKind.hereticAstartes,
             EnemyKind.hereticAstartes,
           ];
-    return [
+    final enemies = [
       for (var i = 0; i < names.length; i++)
-        _enemyForKind(
+        enemyForKind(
           '${map.id}-enemy-$i',
           names[i],
           map.enemySpawns[i % map.enemySpawns.length],
           mult,
         ),
     ];
+
+    if (map.bossSpawn != null) {
+      enemies.add(
+        enemyForKind(
+          '${map.id}-boss',
+          EnemyKind.orkWarboss,
+          map.bossSpawn!,
+          mult,
+        ),
+      );
+    }
+
+    return enemies;
   }
 
-  EnemyUnit _enemyForKind(
+  EnemyUnit enemyForKind(
     String id,
     EnemyKind kind,
     GridPosition spawn,
@@ -1225,6 +544,16 @@ class GameStateNotifier extends Notifier<GameState> {
         maxHp: (34 * mult).round(),
         position: spawn,
         damage: (12 * mult).round(),
+      ),
+      EnemyKind.orkWarboss => EnemyUnit(
+        id: id,
+        name: 'Ork Warboss',
+        kind: kind,
+        hp: (180 * mult).round(),
+        maxHp: (180 * mult).round(),
+        position: spawn,
+        damage: (35 * mult).round(),
+        rpReward: 50,
       ),
       EnemyKind.nob => EnemyUnit(
         id: id,
@@ -1282,93 +611,8 @@ class GameStateNotifier extends Notifier<GameState> {
 
 
 
-  GameState _runEnemyActivationRound(GameState current) {
-    var next = current;
-    final enemies = <EnemyUnit>[];
-    for (final enemy in next.enemies) {
-      if (enemy.hp <= 0) continue;
-      final actingEnemy = _moveEnemyOffMarineTile(next, enemy, enemies);
-      final targetIndex = _nearestMarineIndex(actingEnemy.position, next.squad);
-      if (targetIndex == -1) {
-        enemies.add(actingEnemy);
-        continue;
-      }
-      final target = next.squad[targetIndex];
-      if (actingEnemy.position != target.gridPosition &&
-          actingEnemy.position.distanceTo(target.gridPosition) <=
-              actingEnemy.attackRange &&
-          _pathfinder.hasLineOfSight(
-            map: next.map,
-            from: actingEnemy.position,
-            to: target.gridPosition,
-          )) {
-        next = _damageMarine(
-          next,
-          targetIndex,
-          actingEnemy.damage,
-          '${actingEnemy.name} attacks ${target.name}.',
-          attackerPosition: actingEnemy.position,
-        );
-        enemies.add(actingEnemy.copyWith(path: const [], commandProgress: 0));
-      } else {
-        final blockers = {...next.blockers}
-          ..remove(actingEnemy.position)
-          ..remove(target.gridPosition);
-        final path = _pathfinder.findPath(
-          map: next.map,
-          start: actingEnemy.position,
-          goal: target.gridPosition,
-          blockers: blockers,
-        );
-        final stepPath = path
-            .skip(1)
-            .take(2)
-            .where((step) => step != target.gridPosition)
-            .toList();
-        final rawDestination = stepPath.isEmpty
-            ? actingEnemy.position
-            : stepPath.last;
-        final destination = _safeEnemyDestination(
-          current: next,
-          enemy: actingEnemy,
-          desired: rawDestination,
-          focus: target.gridPosition,
-          reservedEnemyTiles: {
-            for (final resolvedEnemy in enemies) resolvedEnemy.position,
-          },
-        );
-        final movedEnemy = actingEnemy.copyWith(
-          position: destination,
-          path: const [],
-          commandProgress: 0,
-        );
-        final movedDistance = actingEnemy.position.distanceTo(
-          movedEnemy.position,
-        );
-        var afterMove = next;
-        for (final step in stepPath) {
-          afterMove = _triggerOverwatch(afterMove, step);
-        }
-        next = afterMove;
-        final refreshedTarget = next.squad[targetIndex];
-        if (movedDistance > 0 &&
-            movedEnemy.position.distanceTo(refreshedTarget.gridPosition) <=
-                movedEnemy.attackRange) {
-          next = _damageMarine(
-            next,
-            targetIndex,
-            movedEnemy.damage,
-            '${movedEnemy.name} closes and strikes ${refreshedTarget.name}.',
-            attackerPosition: movedEnemy.position,
-          );
-        }
-        enemies.add(movedEnemy);
-      }
-    }
-    return next.copyWith(enemies: enemies);
-  }
 
-  EnemyUnit _moveEnemyOffMarineTile(
+  EnemyUnit moveEnemyOffMarineTile(
     GameState current,
     EnemyUnit enemy,
     List<EnemyUnit> resolvedEnemies,
@@ -1379,7 +623,7 @@ class GameStateNotifier extends Notifier<GameState> {
     };
     if (!marineTiles.contains(enemy.position)) return enemy;
 
-    final destination = _safeEnemyDestination(
+    final destination = safeEnemyDestination(
       current: current,
       enemy: enemy,
       desired: enemy.position,
@@ -1391,179 +635,12 @@ class GameStateNotifier extends Notifier<GameState> {
     return enemy.copyWith(position: destination);
   }
 
-  GridPosition _safeEnemyDestination({
-    required GameState current,
-    required EnemyUnit enemy,
-    required GridPosition desired,
-    required GridPosition focus,
-    required Set<GridPosition> reservedEnemyTiles,
-  }) {
-    if (_canEnemyOccupy(
-      current: current,
-      tile: desired,
-      enemy: enemy,
-      reservedEnemyTiles: reservedEnemyTiles,
-    )) {
-      return desired;
-    }
 
-    final candidates =
-        <GridPosition>{
-          ...focus.neighbors(),
-          ...desired.neighbors(),
-          ...enemy.position.neighbors(),
-        }.toList()..sort((a, b) {
-          final byFocus = a.distanceTo(focus).compareTo(b.distanceTo(focus));
-          if (byFocus != 0) return byFocus;
-          return a
-              .distanceTo(enemy.position)
-              .compareTo(b.distanceTo(enemy.position));
-        });
 
-    for (final candidate in candidates) {
-      if (_canEnemyOccupy(
-        current: current,
-        tile: candidate,
-        enemy: enemy,
-        reservedEnemyTiles: reservedEnemyTiles,
-      )) {
-        return candidate;
-      }
-    }
-    return enemy.position;
-  }
 
-  bool _canEnemyOccupy({
-    required GameState current,
-    required GridPosition tile,
-    required EnemyUnit enemy,
-    required Set<GridPosition> reservedEnemyTiles,
-  }) {
-    if (!current.map.isWalkable(tile) || reservedEnemyTiles.contains(tile)) {
-      return false;
-    }
-    for (final marine in current.squad) {
-      if (marine.hp > 0 && marine.gridPosition == tile) return false;
-    }
-    for (final other in current.enemies) {
-      if (other.hp > 0 && other.id != enemy.id && other.position == tile) {
-        return false;
-      }
-    }
-    return true;
-  }
 
-  GameState _maybeSpawnWave(GameState current) {
-    final waveTime = 25.0 + current.wave * 28.0;
-    if (current.elapsedSeconds < waveTime || current.wave >= 3) return current;
-    final spawns = current.map.enemySpawns;
-    final kind = current.missionIndex == 2
-        ? EnemyKind.hereticAstartes
-        : EnemyKind.orkBoy;
-    final newEnemies = [
-      ...current.enemies,
-      for (var i = 0; i < 2 + current.wave; i++)
-        _enemyForKind(
-          '${current.map.id}-wave-${current.wave}-$i',
-          i == 0 && current.wave > 0 ? kind : EnemyKind.orkBoy,
-          spawns[i % spawns.length],
-          1.0 + current.wave * 0.1,
-        ),
-    ];
-    return _emit(
-      current.copyWith(enemies: newEnemies, wave: current.wave + 1),
-      'Enemy reinforcements entering the battlespace.',
-    );
-  }
 
-  GameState _refreshObjectives(GameState current) {
-    final objectives = <MissionObjective>[];
-    var beaconDestroyed = current.beaconDestroyed;
-    for (final objective in current.objectives) {
-      switch (objective.type) {
-        case ObjectiveType.survive:
-          final progress = objective.requiredValue <= 10
-              ? min(objective.requiredValue, current.wave)
-              : min(objective.requiredValue, current.elapsedSeconds.floor());
-          objectives.add(
-            objective.copyWith(
-              progress: progress,
-              completed: progress >= objective.requiredValue,
-            ),
-          );
-        case ObjectiveType.eliminateAll:
-          objectives.add(
-            objective.copyWith(
-              progress: current.enemies.isEmpty ? 1 : 0,
-              completed: current.enemies.isEmpty,
-            ),
-          );
-        case ObjectiveType.destroyBeacon:
-          final marineOnObjective = current.squad.any(
-            (marine) =>
-                marine.hp > 0 &&
-                current.map.objectiveTiles.contains(marine.gridPosition),
-          );
-          if (marineOnObjective) beaconDestroyed = true;
-          objectives.add(
-            objective.copyWith(
-              progress: beaconDestroyed ? 1 : 0,
-              completed: beaconDestroyed,
-            ),
-          );
-        case ObjectiveType.destroyBase:
-          final totalBases = current.map.enemyBaseTiles.length;
-          final destroyed = totalBases - current.activeEnemyBases.length;
-          objectives.add(
-            objective.copyWith(
-              progress: destroyed,
-              completed: destroyed >= objective.requiredValue,
-            ),
-          );
-        case ObjectiveType.extract:
-          final extracted = current.squad.any(
-            (marine) =>
-                marine.hp > 0 &&
-                current.map.extractionTiles.contains(marine.gridPosition),
-          );
-          objectives.add(
-            objective.copyWith(
-              progress: extracted ? 1 : 0,
-              completed: extracted,
-            ),
-          );
-      }
-    }
-    return current.copyWith(
-      objectives: objectives,
-      beaconDestroyed: beaconDestroyed,
-    );
-  }
-
-  GameState _checkMissionEnd(GameState current) {
-    if (current.missionStatus != MissionStatus.active) return current;
-    final alive = current.squad.any((marine) => marine.hp > 0);
-    if (!alive) {
-      return _emit(
-        current.copyWith(missionStatus: MissionStatus.defeat),
-        'Mission failed. Squad incapacitated.',
-      );
-    }
-    if (current.objectives.every((objective) => objective.completed)) {
-      return _emit(
-        current.copyWith(
-          missionStatus: MissionStatus.victory,
-          requisitionPoints: current.requisitionPoints + current.map.rewardRP,
-          speed: SimulationSpeed.paused,
-        ),
-        'Mission complete. ${current.map.rewardRP} RP secured.',
-        important: true,
-      );
-    }
-    return current;
-  }
-
-  void _damageEnemy(
+  void damageEnemy(
     int enemyIndex,
     int rawDamage,
     String message, {
@@ -1575,6 +652,7 @@ class GameStateNotifier extends Notifier<GameState> {
       target: enemy.position,
       attacker: attackerPosition,
       map: state.map,
+      dropPods: state.dropPodCoverTiles,
     );
     final damage = inCover ? (rawDamage * 0.65).round() : rawDamage;
     final nextHp = enemy.hp - damage;
@@ -1590,7 +668,7 @@ class GameStateNotifier extends Notifier<GameState> {
       );
     }
     final defeated = nextHp <= 0;
-    state = _emit(
+    state = emit(
       state.copyWith(
         squad: squad,
         enemies: defeated
@@ -1611,9 +689,16 @@ class GameStateNotifier extends Notifier<GameState> {
           ? '$message ${enemy.name} eliminated.'
           : '$message $damage damage.',
     );
+
+    if (enemy.kind == EnemyKind.orkWarboss && 
+        enemy.hp > enemy.maxHp / 2 && 
+        nextHp <= enemy.maxHp / 2) {
+      state = triggerWaaagh(state);
+    }
   }
 
-  GameState _damageMarine(
+
+  GameState damageMarine(
     GameState current,
     int marineIndex,
     int rawDamage,
@@ -1625,94 +710,18 @@ class GameStateNotifier extends Notifier<GameState> {
       target: marine.gridPosition,
       attacker: attackerPosition,
       map: current.map,
+      dropPods: current.dropPodCoverTiles,
     );
     final mitigated = max(2, rawDamage - marine.armor.defense);
     final damage = covered ? (mitigated * 0.55).round() : mitigated;
     final squad = List<Marine>.from(current.squad);
     squad[marineIndex] = marine.copyWith(hp: max(0, marine.hp - damage));
-    return _emit(current.copyWith(squad: squad), '$message $damage damage.');
+    return emit(current.copyWith(squad: squad), '$message $damage damage.');
   }
 
-  GameState _triggerOverwatch(GameState current, GridPosition enemyPosition) {
-    final enemyIndex = current.enemyAt(enemyPosition);
-    if (enemyIndex == -1) return current;
-    for (var i = 0; i < current.squad.length; i++) {
-      final marine = current.squad[i];
-      if (!marine.isOverwatching || marine.hp <= 0) continue;
-      if (marine.gridPosition.distanceTo(enemyPosition) <=
-              GameState.rangedAttackRange &&
-          _pathfinder.hasLineOfSight(
-            map: current.map,
-            from: marine.gridPosition,
-            to: enemyPosition,
-          )) {
-        final enemies = List<EnemyUnit>.from(current.enemies);
-        final enemy = enemies[enemyIndex];
-        enemies[enemyIndex] = enemy.copyWith(hp: enemy.hp - 12);
-        final squad = List<Marine>.from(current.squad);
-        squad[i] = marine.copyWith(isOverwatching: false);
-        return _emit(
-          current.copyWith(
-            squad: squad,
-            enemies: enemies.where((enemy) => enemy.hp > 0).toList(),
-          ),
-          '${marine.name} fires Overwatch.',
-        );
-      }
-    }
-    return current;
-  }
 
-  int _nearestMarineIndex(GridPosition from, List<Marine> squad) {
-    var bestIndex = -1;
-    var bestDistance = 999;
-    for (var i = 0; i < squad.length; i++) {
-      if (squad[i].hp <= 0) continue;
-      final distance = from.distanceTo(squad[i].gridPosition);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        bestIndex = i;
-      }
-    }
-    return bestIndex;
-  }
-
-  void toggleDropZone(GridPosition tile) {
-    if (state.activationPhase != ActivationPhase.deployment) return;
-    
-    final currentSelected = Set<GridPosition>.from(state.selectedDropZones);
-    if (currentSelected.contains(tile)) {
-      currentSelected.remove(tile);
-    } else {
-      if (currentSelected.length < state.squad.length) {
-        currentSelected.add(tile);
-      }
-    }
-    state = state.copyWith(selectedDropZones: currentSelected);
-  }
-
-  void confirmDeployment() {
-    if (state.activationPhase != ActivationPhase.deployment) return;
-    if (state.selectedDropZones.length != state.squad.length) return;
-
-    final drops = state.selectedDropZones.toList();
-    final newSquad = <Marine>[];
-    for (int i = 0; i < state.squad.length; i++) {
-      newSquad.add(state.squad[i].copyWith(gridPosition: drops[i]));
-    }
-
-    state = state.copyWith(
-      activationPhase: ActivationPhase.marines,
-      squad: newSquad,
-      events: [
-        ...state.events,
-        const CombatEvent('Drop coordinates confirmed. Initiating planetfall.', important: true),
-      ],
-      statusMessage: 'Drop pods launched. Squad deployed.',
-    );
-  }
-
-  GameState _emit(GameState next, String message, {bool important = false}) {
+  // Deployment phase removed
+  GameState emit(GameState next, String message, {bool important = false}) {
     final events = [
       CombatEvent(message, important: important),
       ...next.events.take(7),
@@ -1720,7 +729,7 @@ class GameStateNotifier extends Notifier<GameState> {
     return next.copyWith(statusMessage: message, events: events);
   }
 
-  String _modeName(ActionMode? mode) {
+  String modeName(ActionMode? mode) {
     return switch (mode) {
       ActionMode.move => 'Move',
       ActionMode.shoot => 'Shoot',
