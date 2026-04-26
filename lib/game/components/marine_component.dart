@@ -18,7 +18,11 @@ class MarineComponent extends SpriteAnimationGroupComponent<UnitState>
   }) : marineState = marine,
        super(
          position: position,
-         size: Vector2.all(CrusadeGame.tileSize * 0.78),
+         size: Vector2.all(
+           marine.spriteKey == 'terminator'
+               ? CrusadeGame.tileSize * 1.06
+               : CrusadeGame.tileSize * 0.92,
+         ),
        ) {
     anchor = Anchor.center;
   }

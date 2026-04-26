@@ -45,7 +45,10 @@ class _CommandScreenState extends ConsumerState<CommandScreen> {
     _game = CrusadeGame(ref);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(gameStateProvider.notifier).startMission(
+      if (!mounted) return;
+      ref
+          .read(gameStateProvider.notifier)
+          .startMission(
             widget.missionIndex,
             selectedDropZone: widget.selectedDropZone,
           );
@@ -97,14 +100,22 @@ class _CommandScreenState extends ConsumerState<CommandScreen> {
                 children: [
                   TopStatusCard(state: gameState),
                   const SizedBox(width: 8),
-                  Expanded(child: ObjectiveBar(objectives: gameState.objectives)),
+                  Expanded(
+                    child: ObjectiveBar(objectives: gameState.objectives),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
               Expanded(
                 child: Row(
                   children: [
-                    Expanded(child: BattlefieldFrame(game: _game, state: gameState, onSetMode: _setMode)),
+                    Expanded(
+                      child: BattlefieldFrame(
+                        game: _game,
+                        state: gameState,
+                        onSetMode: _setMode,
+                      ),
+                    ),
                     const SizedBox(width: 10),
                     SizedBox(
                       width: 300,

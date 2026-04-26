@@ -40,6 +40,7 @@ class CrusadeGame extends FlameGame {
   bool _cutsceneActive = false;
   bool _hasTriggeredDeployment = false;
   bool _hasSpawnedDropPod = false;
+  bool _pendingResetWorld = false;
   bool get isCutsceneActive => _cutsceneActive;
 
   bool _isFullyLoaded = false;
@@ -62,8 +63,13 @@ class CrusadeGame extends FlameGame {
     _gridOverlay = GridOverlayComponent()..priority = 1;
     world.add(_gridOverlay);
 
-    // Don't sync yet - wait for startMission to be called from CommandScreen
     _isFullyLoaded = true;
+    if (_pendingResetWorld) {
+      _pendingResetWorld = false;
+      await resetWorld();
+    } else {
+      _syncFromState(force: true);
+    }
   }
 
   Future<void> changeBackground(String imageName) async {
@@ -296,7 +302,7 @@ class CrusadeGame extends FlameGame {
           newComponent.sync(marine, selected: i == state.selectedMarineIndex);
         }
         // Hide all marines initially – they reveal on pod landing
-        if (isInitialDrop) newComponent.opacity = 0;
+        if (isInitialDrop) newComponent.opacity = 1;
       } else {
         component.sync(marine, selected: i == state.selectedMarineIndex);
       }
@@ -400,7 +406,12 @@ class CrusadeGame extends FlameGame {
 
   /// Called from CommandScreen after startMission() updates the state.
   /// Clears all existing entity components and re-syncs from scratch.
-  void resetWorld() {
+  Future<void> resetWorld() async {
+    if (!_isFullyLoaded) {
+      _pendingResetWorld = true;
+      return;
+    }
+
     // Clear all existing unit components
     for (final c in _marineComponents.values) {
       c.removeFromParent();
@@ -426,6 +437,7 @@ class CrusadeGame extends FlameGame {
     final state = ref.read(gameStateProvider);
 
     // Update background to match new map
+    _background.sprite = await loadSprite(state.map.background);
     _background.size = Vector2(
       state.map.width * tileSize,
       state.map.height * tileSize,

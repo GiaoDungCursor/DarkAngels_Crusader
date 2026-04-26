@@ -36,20 +36,7 @@ class EnemyComponent extends SpriteAnimationGroupComponent<UnitState>
 
   Future<SpriteAnimation> _loadAnim(String path) async {
     final img = await game.images.load(path);
-    final isGrid = path.contains('spritesheet');
-    if (isGrid) {
-      return SpriteAnimation.fromFrameData(
-        img,
-        SpriteAnimationData.sequenced(
-          amount: 4,
-          amountPerRow: 2,
-          stepTime: 0.15,
-          textureSize: Vector2(img.width / 2, img.height / 2),
-        ),
-      );
-    } else {
-      return SpriteAnimation.spriteList([Sprite(img)], stepTime: 1.0);
-    }
+    return SpriteAnimation.spriteList([Sprite(img)], stepTime: 1.0);
   }
 
   @override
@@ -91,19 +78,45 @@ class EnemyComponent extends SpriteAnimationGroupComponent<UnitState>
     }
 
     if (enemy.hp <= 0) {
-      current = UnitState.dead;
-      _hpBar?.setOpacity(0);
+      if (current != UnitState.dead) {
+        current = UnitState.dead;
+        _hpBar?.setOpacity(0);
+        // Procedural Death: Fall over
+        add(
+          RotateEffect.to(
+            pi / 2, // 90 degrees
+            EffectController(duration: 0.4, curve: Curves.easeIn),
+          ),
+        );
+        add(OpacityEffect.to(0.4, EffectController(duration: 0.8)));
+      }
       return;
     }
 
     if (position.distanceTo(target) > 1) {
       current = UnitState.walk;
       children.whereType<MoveToEffect>().forEach((e) => e.removeFromParent());
+      children.whereType<RotateEffect>().forEach((e) => e.removeFromParent());
+
+      // Procedural Walk: Move and Waddle
       add(
         MoveToEffect(
           target,
           EffectController(duration: 0.46, curve: Curves.easeOutCubic),
-          onComplete: () => current = UnitState.idle,
+          onComplete: () {
+            current = UnitState.idle;
+            angle = 0; // Reset rotation
+          },
+        ),
+      );
+      add(
+        RotateEffect.by(
+          0.15,
+          EffectController(
+            duration: 0.15,
+            reverseDuration: 0.15,
+            repeatCount: 2,
+          ),
         ),
       );
     }
@@ -114,13 +127,21 @@ class EnemyComponent extends SpriteAnimationGroupComponent<UnitState>
     if (!_animationsReady) return;
     if (current == UnitState.dead) return;
     current = UnitState.attack;
+
+    // Procedural Attack: Lunge forward and scale up
     add(
       ScaleEffect.to(
-        Vector2.all(0.84),
-        EffectController(duration: 0.08, reverseDuration: 0.1),
+        Vector2.all(1.2), // Lunge big
+        EffectController(duration: 0.08, reverseDuration: 0.15),
         onComplete: () {
           if (enemyState.hp > 0) current = UnitState.idle;
         },
+      ),
+    );
+    add(
+      RotateEffect.to(
+        -0.2, // Lean into the attack
+        EffectController(duration: 0.08, reverseDuration: 0.15),
       ),
     );
   }
@@ -131,8 +152,10 @@ class EnemyComponent extends SpriteAnimationGroupComponent<UnitState>
     if (!_animationsReady) return;
     if (current != UnitState.idle) return;
     _idleTime += dt;
-    final pulse = 1.0 + sin(_idleTime * 4.8 + enemyId.hashCode) * 0.025;
-    scale = Vector2.all(pulse);
+    // Procedural Idle: Subtle breathing scale and slight float
+    final pulseY = 1.0 + sin(_idleTime * 4.0 + enemyId.hashCode) * 0.03;
+    final pulseX = 1.0 - sin(_idleTime * 4.0 + enemyId.hashCode) * 0.01;
+    scale = Vector2(pulseX, pulseY);
   }
 
   @override
